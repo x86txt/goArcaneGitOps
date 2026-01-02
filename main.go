@@ -24,14 +24,14 @@ const (
 )
 
 type Config struct {
-	RepoPath       string
-	ArcaneBaseURL  string // Arcane API base URL (e.g., http://localhost:3552)
-	ArcaneAPIKey   string // Arcane API key
-	ArcaneEnvID    string
-	LogFile        string
-	GitAuthMethod  string // Authentication method: "ssh" or "https"
-	GitSSHKeyPath  string // SSH private key for git operations (if using SSH)
-	GitHTTPSToken  string // GitHub personal access token (if using HTTPS)
+	RepoPath      string
+	ArcaneBaseURL string // Arcane API base URL (e.g., http://localhost:3552)
+	ArcaneAPIKey  string // Arcane API key
+	ArcaneEnvID   string
+	LogFile       string
+	GitAuthMethod string // Authentication method: "ssh" or "https"
+	GitSSHKeyPath string // SSH private key for git operations (if using SSH)
+	GitHTTPSToken string // GitHub personal access token (if using HTTPS)
 }
 
 // Arcane API types
