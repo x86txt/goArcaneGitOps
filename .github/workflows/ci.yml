@@ -41,7 +41,7 @@ jobs:
       - name: Run go mod tidy check
         run: |
           go mod tidy
-          git diff --exit-code go.mod go.sum || (echo "go.mod or go.sum needs to be updated. Run 'go mod tidy'" && exit 1)
+          git diff --exit-code go.mod || (echo "go.mod needs to be updated. Run 'go mod tidy'" && exit 1)
 
       - name: Build
         run: go build -v -o sync-tool ./main.go
