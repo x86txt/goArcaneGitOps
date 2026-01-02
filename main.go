@@ -114,7 +114,11 @@ func (c *ArcaneAPIClient) doRequest(method, endpoint string, body interface{}) (
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Log but don't fail on close error
+		}
+	}()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -865,7 +869,10 @@ func setupGitSSH(keyPath string) {
 	// Set GIT_SSH_COMMAND to use the specified SSH key
 	// This tells git to use this key for all SSH operations
 	sshCommand := fmt.Sprintf("ssh -i %s -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null", keyPath)
-	os.Setenv("GIT_SSH_COMMAND", sshCommand)
+	if err := os.Setenv("GIT_SSH_COMMAND", sshCommand); err != nil {
+		logWarning(fmt.Sprintf("failed to set GIT_SSH_COMMAND environment variable: %v", err))
+		return
+	}
 
 	logInfo(fmt.Sprintf("Configured git to use SSH key: %s", keyPath))
 }
