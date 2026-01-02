@@ -24,12 +24,14 @@ const (
 )
 
 type Config struct {
-	RepoPath      string
-	ArcaneBaseURL string // Arcane API base URL (e.g., http://localhost:3552)
-	ArcaneAPIKey  string // Arcane API key
-	ArcaneEnvID   string
-	LogFile       string
-	GitSSHKeyPath string // SSH private key for git operations
+	RepoPath       string
+	ArcaneBaseURL  string // Arcane API base URL (e.g., http://localhost:3552)
+	ArcaneAPIKey   string // Arcane API key
+	ArcaneEnvID    string
+	LogFile        string
+	GitAuthMethod  string // Authentication method: "ssh" or "https"
+	GitSSHKeyPath  string // SSH private key for git operations (if using SSH)
+	GitHTTPSToken  string // GitHub personal access token (if using HTTPS)
 }
 
 // Arcane API types
@@ -292,7 +294,9 @@ func main() {
 		ArcaneAPIKey:  os.Getenv("ARCANE_API_KEY"),
 		ArcaneEnvID:   getEnvOrDefault("ARCANE_ENV_ID", "0"),
 		LogFile:       getEnvOrDefault("LOG_FILE", "/var/log/sync-tool.log"),
+		GitAuthMethod: getEnvOrDefault("GIT_AUTH_METHOD", "ssh"),
 		GitSSHKeyPath: os.Getenv("GIT_SSH_KEY_PATH"),
+		GitHTTPSToken: os.Getenv("GIT_HTTPS_TOKEN"),
 	}
 
 	// Validate configuration
@@ -306,10 +310,8 @@ func main() {
 		log.Fatal("ARCANE_API_KEY environment variable is required")
 	}
 
-	// Setup SSH key for git if configured
-	if config.GitSSHKeyPath != "" {
-		setupGitSSH(config.GitSSHKeyPath)
-	}
+	// Setup git authentication based on configured method
+	setupGitAuth(config.GitAuthMethod, config.GitSSHKeyPath, config.GitHTTPSToken)
 
 	// Setup logging
 	setupLogging(config.LogFile)
@@ -859,6 +861,19 @@ func getEnvOrDefault(key, defaultValue string) string {
 	return defaultValue
 }
 
+func setupGitAuth(authMethod, sshKeyPath, httpsToken string) {
+	authMethod = strings.ToLower(authMethod)
+
+	if authMethod == "ssh" {
+		setupGitSSH(sshKeyPath)
+	} else if authMethod == "https" {
+		setupGitHTTPS(httpsToken)
+	} else {
+		logWarning(fmt.Sprintf("Unknown git auth method: %s, defaulting to SSH", authMethod))
+		setupGitSSH(sshKeyPath)
+	}
+}
+
 func setupGitSSH(keyPath string) {
 	// Check if SSH key exists
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
@@ -875,4 +890,27 @@ func setupGitSSH(keyPath string) {
 	}
 
 	logInfo(fmt.Sprintf("Configured git to use SSH key: %s", keyPath))
+}
+
+func setupGitHTTPS(token string) {
+	if token == "" {
+		logWarning("GitHub personal access token not provided, git HTTPS operations may fail")
+		return
+	}
+
+	// Configure git to use the token for HTTPS authentication
+	// Format: https://<token>@github.com/<user>/<repo>.git
+	// We use git credential helper to store the token
+	if err := os.Setenv("GIT_ASKPASS", "true"); err != nil {
+		logWarning(fmt.Sprintf("failed to set GIT_ASKPASS: %v", err))
+	}
+
+	// Create a temporary git credential helper script that provides the token
+	credentialHelper := fmt.Sprintf("printf '%s'", token)
+	if err := os.Setenv("GIT_ASKPASS_SUDO", credentialHelper); err != nil {
+		logWarning(fmt.Sprintf("failed to set credential helper: %v", err))
+		return
+	}
+
+	logInfo("Configured git to use HTTPS with personal access token")
 }

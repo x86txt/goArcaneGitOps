@@ -77,7 +77,9 @@ create_config() {
     EXISTING_ARCANE_URL=""
     EXISTING_ARCANE_KEY=""
     EXISTING_ENV_ID=""
+    EXISTING_GIT_AUTH_METHOD=""
     EXISTING_GIT_SSH_KEY_PATH=""
+    EXISTING_GIT_HTTPS_TOKEN=""
     if [[ -f "${CONFIG_PATH}/config.env" ]]; then
         # shellcheck disable=SC1090
         source "${CONFIG_PATH}/config.env"
@@ -85,7 +87,9 @@ create_config() {
         EXISTING_ARCANE_URL="${ARCANE_BASE_URL:-}"
         EXISTING_ARCANE_KEY="${ARCANE_API_KEY:-}"
         EXISTING_ENV_ID="${ARCANE_ENV_ID:-}"
+        EXISTING_GIT_AUTH_METHOD="${GIT_AUTH_METHOD:-}"
         EXISTING_GIT_SSH_KEY_PATH="${GIT_SSH_KEY_PATH:-}"
+        EXISTING_GIT_HTTPS_TOKEN="${GIT_HTTPS_TOKEN:-}"
 
         # Legacy default from older versions (CLI used "default"); Arcane API typically uses "0"
         if [[ "$EXISTING_ENV_ID" == "default" ]]; then
@@ -203,28 +207,62 @@ create_config() {
     print_info "Ensure your folder names match your Arcane project names"
     print_info "Example: ${REPO_PATH}/zerobyte/compose.yaml → Arcane project 'zerobyte'"
     echo
-    
-    # Git SSH Configuration
-    print_info "Git SSH Configuration"
-    DEFAULT_USE_SSH="n"
-    if [[ -n "$EXISTING_GIT_SSH_KEY_PATH" ]]; then
-        DEFAULT_USE_SSH="y"
-    fi
-    read -p "Do you need a private SSH key for git access? (y/n) [$DEFAULT_USE_SSH]: " -n 1 -r
+
+    # Git Authentication Configuration
+    print_info "Git Authentication Configuration"
+    print_info "Choose how to authenticate with your Git repository:"
+    print_info "1. SSH (using private key) - recommended for automated systems"
+    print_info "2. HTTPS (using GitHub personal access token)"
     echo
-    REPLY=${REPLY:-$DEFAULT_USE_SSH}
+
+    DEFAULT_AUTH_METHOD="${EXISTING_GIT_AUTH_METHOD:-ssh}"
+    read -p "Select authentication method (ssh/https) [$DEFAULT_AUTH_METHOD]: " AUTH_METHOD_INPUT
+    AUTH_METHOD=${AUTH_METHOD_INPUT:-$DEFAULT_AUTH_METHOD}
+
+    # Normalize input
+    AUTH_METHOD=$(echo "$AUTH_METHOD" | tr '[:upper:]' '[:lower:]')
+
     SSH_KEY_PATH=""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
+    HTTPS_TOKEN=""
+
+    if [[ "$AUTH_METHOD" == "ssh" ]]; then
         DEFAULT_SSH_KEY_PATH="${EXISTING_GIT_SSH_KEY_PATH:-/root/.ssh/id_rsa}"
         read -p "Enter the path to your SSH private key [$DEFAULT_SSH_KEY_PATH]: " SSH_KEY_INPUT
         SSH_KEY_PATH=${SSH_KEY_INPUT:-$DEFAULT_SSH_KEY_PATH}
-        
+
         if [[ ! -f "$SSH_KEY_PATH" ]]; then
             print_warning "SSH key file not found at ${SSH_KEY_PATH}"
             print_warning "Make sure to create it before running the service"
         else
             print_success "SSH key configured: ${SSH_KEY_PATH}"
         fi
+    elif [[ "$AUTH_METHOD" == "https" ]]; then
+        print_info "GitHub Personal Access Token:"
+        print_info "Create a token at: https://github.com/settings/tokens"
+        print_info "Required scopes: repo (full control of private repositories)"
+        echo
+
+        if [[ -n "$EXISTING_GIT_HTTPS_TOKEN" ]]; then
+            read -s -p "Enter your GitHub personal access token [press Enter to keep existing]: " HTTPS_TOKEN_INPUT
+            echo
+            HTTPS_TOKEN=${HTTPS_TOKEN_INPUT:-$EXISTING_GIT_HTTPS_TOKEN}
+        fi
+
+        while [[ -z "${HTTPS_TOKEN:-}" ]]; do
+            read -s -p "Enter your GitHub personal access token: " HTTPS_TOKEN
+            echo
+            if [[ -z "$HTTPS_TOKEN" ]]; then
+                print_error "GitHub personal access token is required!"
+            fi
+        done
+
+        print_success "GitHub HTTPS authentication configured"
+    else
+        print_error "Invalid authentication method. Using default (ssh)"
+        AUTH_METHOD="ssh"
+        DEFAULT_SSH_KEY_PATH="${EXISTING_GIT_SSH_KEY_PATH:-/root/.ssh/id_rsa}"
+        read -p "Enter the path to your SSH private key [$DEFAULT_SSH_KEY_PATH]: " SSH_KEY_INPUT
+        SSH_KEY_PATH=${SSH_KEY_INPUT:-$DEFAULT_SSH_KEY_PATH}
     fi
     
     # Create config file
@@ -234,6 +272,9 @@ create_config() {
 
 # Git repository path (projects are discovered within this directory)
 COMPOSE_REPO_PATH=${REPO_PATH}
+
+# Git Authentication Method (ssh or https)
+GIT_AUTH_METHOD=${AUTH_METHOD}
 
 # Arcane API Configuration
 ARCANE_BASE_URL=${ARCANE_URL}
@@ -245,10 +286,17 @@ LOG_FILE=/var/log/sync-tool.log
 EOF
 
     # Add SSH key path if configured
-    if [[ -n "$SSH_KEY_PATH" ]]; then
+    if [[ "$AUTH_METHOD" == "ssh" && -n "$SSH_KEY_PATH" ]]; then
         echo "" >> ${CONFIG_PATH}/config.env
-        echo "# Git SSH key for private repositories" >> ${CONFIG_PATH}/config.env
+        echo "# Git SSH private key for repository access" >> ${CONFIG_PATH}/config.env
         echo "GIT_SSH_KEY_PATH=${SSH_KEY_PATH}" >> ${CONFIG_PATH}/config.env
+    fi
+
+    # Add HTTPS token if configured
+    if [[ "$AUTH_METHOD" == "https" && -n "$HTTPS_TOKEN" ]]; then
+        echo "" >> ${CONFIG_PATH}/config.env
+        echo "# GitHub personal access token for HTTPS authentication" >> ${CONFIG_PATH}/config.env
+        echo "GIT_HTTPS_TOKEN=${HTTPS_TOKEN}" >> ${CONFIG_PATH}/config.env
     fi
     
     echo "" >> ${CONFIG_PATH}/config.env
@@ -267,11 +315,14 @@ EOF
             echo
             print_info "Configuration summary:"
             echo "  Repository: ${REPO_PATH}"
+            echo "  Git auth method: ${AUTH_METHOD}"
+            if [[ "$AUTH_METHOD" == "ssh" ]]; then
+                echo "  SSH key: ${SSH_KEY_PATH}"
+            else
+                echo "  HTTPS token: ***MASKED***"
+            fi
             echo "  Arcane URL: ${ARCANE_URL}"
             echo "  Arcane environment: ${ENV_ID}"
-            if [[ -n "$SSH_KEY_PATH" ]]; then
-                echo "  SSH key: ${SSH_KEY_PATH}"
-            fi
         else
             print_error "Config file is missing required values!"
             cat "${CONFIG_PATH}/config.env"
