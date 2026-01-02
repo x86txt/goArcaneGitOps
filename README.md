@@ -51,25 +51,25 @@ The installer will:
 
 ```bash
 # Build
-go build -o sync-tool main.go
+go build -o arcane-gitops main.go
 
 # Install binary
-sudo install -m 755 sync-tool /usr/local/bin/sync-tool
+sudo install -m 755 arcane-gitops /usr/local/bin/arcane-gitops
 
 # Create config
-sudo mkdir -p /etc/sync-tool
-sudo cp config.env.example /etc/sync-tool/config.env
-sudo nano /etc/sync-tool/config.env  # Edit with your values
+sudo mkdir -p /etc/arcane-gitops
+sudo cp config.env.example /etc/arcane-gitops/config.env
+sudo nano /etc/arcane-gitops/config.env  # Edit with your values
 
 # Install systemd files
-sudo cp sync-tool.service sync-tool.timer /etc/systemd/system/
+sudo cp arcane-gitops.service arcane-gitops.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now sync-tool.timer
+sudo systemctl enable --now arcane-gitops.timer
 ```
 
 ## Configuration
 
-Create `/etc/sync-tool/config.env` with:
+Create `/etc/arcane-gitops/config.env` with:
 
 ```bash
 # Git repository path (where compose files live)
@@ -92,7 +92,7 @@ GIT_SSH_KEY_PATH=/root/.ssh/id_rsa
 1. Log in to Arcane
 2. Go to **Settings** → **API Keys**
 3. Click **Add API Key**
-4. Give it a name (e.g., "sync-tool")
+4. Give it a name (e.g., "arcane-gitops")
 5. Copy the key immediately (it won't be shown again!)
 
 ## Usage
@@ -101,17 +101,17 @@ GIT_SSH_KEY_PATH=/root/.ssh/id_rsa
 
 ```bash
 # Run sync now
-sudo systemctl start sync-tool.service
+sudo systemctl start arcane-gitops.service
 
 # View logs
-sudo journalctl -u sync-tool.service -f
+sudo journalctl -u arcane-gitops.service -f
 ```
 
 ### Timer Status
 
 ```bash
 # Check when next sync will run
-sudo systemctl status sync-tool.timer
+sudo systemctl status arcane-gitops.timer
 
 # List all timers
 sudo systemctl list-timers
@@ -119,7 +119,7 @@ sudo systemctl list-timers
 
 ### Adjust Sync Frequency
 
-Edit `/etc/systemd/system/sync-tool.timer`:
+Edit `/etc/systemd/system/arcane-gitops.timer`:
 
 ```ini
 [Timer]
@@ -131,7 +131,7 @@ Then reload:
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl restart sync-tool.timer
+sudo systemctl restart arcane-gitops.timer
 ```
 
 ## Project Structure
@@ -169,7 +169,7 @@ The tool uses these Arcane API endpoints:
 ### Check Config
 
 ```bash
-cat /etc/sync-tool/config.env
+cat /etc/arcane-gitops/config.env
 ```
 
 ### Test API Connection
@@ -181,7 +181,7 @@ curl -H "X-Api-Key: YOUR_KEY" http://localhost:3552/api/environments/default/pro
 ### View Detailed Logs
 
 ```bash
-sudo journalctl -u sync-tool.service -n 100 --no-pager
+sudo journalctl -u arcane-gitops.service -n 100 --no-pager
 ```
 
 ### Force Sync
@@ -189,7 +189,7 @@ sudo journalctl -u sync-tool.service -n 100 --no-pager
 If projects are out of sync, the tool will automatically reconcile on next run. To force it:
 
 ```bash
-sudo systemctl start sync-tool.service
+sudo systemctl start arcane-gitops.service
 ```
 
 ## License

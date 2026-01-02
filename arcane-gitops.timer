@@ -1,6 +1,6 @@
 [Unit]
 Description=Run Docker Compose Sync every 5 minutes
-Requires=sync-tool.service
+Requires=arcane-gitops.service
 
 [Timer]
 # Run every 5 minutes

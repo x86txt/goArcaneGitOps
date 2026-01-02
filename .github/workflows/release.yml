@@ -62,7 +62,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          BINARY_NAME="sync-tool${{ matrix.binary_ext || '' }}"
+          BINARY_NAME="arcane-gitops${{ matrix.binary_ext || '' }}"
           mkdir -p build
           go build -ldflags="-s -w" -o "build/$BINARY_NAME" ./main.go
           echo "Built: build/$BINARY_NAME"
@@ -73,7 +73,7 @@ jobs:
           VERSION="${{ steps.version.outputs.version }}"
           GOOS="${{ matrix.goos }}"
           GOARCH="${{ matrix.goarch }}"
-          ARCHIVE_NAME="sync-tool-${VERSION}-${GOOS}-${GOARCH}"
+          ARCHIVE_NAME="arcane-gitops-${VERSION}-${GOOS}-${GOARCH}"
 
           mkdir -p dist
           cd build
@@ -173,7 +173,7 @@ jobs:
               size=$(du -h "$file" | cut -f1)
               checksum_file="${filename}.sha256"
               # Extract platform and arch from filename
-              if [[ "$filename" =~ sync-tool-.*-([^-]+)-([^.]+)\.(tar\.gz|zip) ]]; then
+              if [[ "$filename" =~ arcane-gitops-.*-([^-]+)-([^.]+)\.(tar\.gz|zip) ]]; then
                 platform="${BASH_REMATCH[1]}"
                 arch="${BASH_REMATCH[2]}"
                 echo "| ${platform} | ${arch} | \`${filename}\` (${size}) | \`${checksum_file}\` |" >> release_notes.md
@@ -189,24 +189,24 @@ jobs:
             echo ""
             echo "\`\`\`bash"
             echo "# Linux/macOS"
-            echo "sha256sum -c sync-tool-${{ steps.version.outputs.version }}-linux-amd64.tar.gz.sha256"
+            echo "sha256sum -c arcane-gitops-${{ steps.version.outputs.version }}-linux-amd64.tar.gz.sha256"
             echo ""
             echo "# Or manually compare"
-            echo "sha256sum sync-tool-${{ steps.version.outputs.version }}-linux-amd64.tar.gz"
-            echo "cat sync-tool-${{ steps.version.outputs.version }}-linux-amd64.tar.gz.sha256"
+            echo "sha256sum arcane-gitops-${{ steps.version.outputs.version }}-linux-amd64.tar.gz"
+            echo "cat arcane-gitops-${{ steps.version.outputs.version }}-linux-amd64.tar.gz.sha256"
             echo "\`\`\`"
             echo ""
             echo "## Installation"
             echo ""
-            echo "Extract the archive and copy the \`sync-tool\` binary to your PATH:"
+            echo "Extract the archive and copy the \`arcane-gitops\` binary to your PATH:"
             echo ""
             echo "\`\`\`bash"
             echo "# Linux/macOS"
-            echo "tar -xzf sync-tool-${{ steps.version.outputs.version }}-linux-amd64.tar.gz"
-            echo "sudo install -m 755 sync-tool /usr/local/bin/"
+            echo "tar -xzf arcane-gitops-${{ steps.version.outputs.version }}-linux-amd64.tar.gz"
+            echo "sudo install -m 755 arcane-gitops /usr/local/bin/"
             echo ""
             echo "# Windows"
-            echo "# Extract the ZIP file and add sync-tool.exe to your PATH"
+            echo "# Extract the ZIP file and add arcane-gitops.exe to your PATH"
             echo "\`\`\`"
           } >> release_notes.md
 

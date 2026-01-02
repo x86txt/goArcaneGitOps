@@ -1,4 +1,4 @@
-module github.com/secunit/sync-tool
+module github.com/secunit/arcane-gitops
 
 go 1.21
 

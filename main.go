@@ -291,7 +291,7 @@ func main() {
 		ArcaneBaseURL: os.Getenv("ARCANE_BASE_URL"),
 		ArcaneAPIKey:  os.Getenv("ARCANE_API_KEY"),
 		ArcaneEnvID:   getEnvOrDefault("ARCANE_ENV_ID", "0"),
-		LogFile:       getEnvOrDefault("LOG_FILE", "/var/log/sync-tool.log"),
+		LogFile:       getEnvOrDefault("LOG_FILE", "/var/log/arcane-gitops.log"),
 		GitAuthMethod: getEnvOrDefault("GIT_AUTH_METHOD", "ssh"),
 		GitSSHKeyPath: os.Getenv("GIT_SSH_KEY_PATH"),
 		GitHTTPSToken: os.Getenv("GIT_HTTPS_TOKEN"),
@@ -460,7 +460,7 @@ func main() {
 			for _, p := range projects {
 				ids = append(ids, p.ID)
 			}
-			logWarning(fmt.Sprintf("Multiple Arcane projects share the same name '%s' (IDs: %s). sync-tool will only operate on one; please delete duplicates in Arcane UI.", name, strings.Join(ids, ", ")))
+			logWarning(fmt.Sprintf("Multiple Arcane projects share the same name '%s' (IDs: %s). arcane-gitops will only operate on one; please delete duplicates in Arcane UI.", name, strings.Join(ids, ", ")))
 		}
 	}
 

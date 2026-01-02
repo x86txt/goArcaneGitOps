@@ -43,17 +43,17 @@ arcane config set --server-url http://localhost:3552 --api-key YOUR_API_KEY
 make install
 
 # 4. Configure
-sudo cp /etc/sync-tool/config.env.example /etc/sync-tool/config.env
-sudo nano /etc/sync-tool/config.env
+sudo cp /etc/arcane-gitops/config.env.example /etc/arcane-gitops/config.env
+sudo nano /etc/arcane-gitops/config.env
 
 # 5. Enable service
-sudo systemctl enable sync-tool.timer
-sudo systemctl start sync-tool.timer
+sudo systemctl enable arcane-gitops.timer
+sudo systemctl start arcane-gitops.timer
 ```
 
 ## Configuration
 
-Edit `/etc/sync-tool/config.env`:
+Edit `/etc/arcane-gitops/config.env`:
 
 ```bash
 # Path to your git repository
@@ -106,24 +106,24 @@ git push
 **Setup SSH Key for Private Repos:**
 ```bash
 # Generate SSH key if needed
-ssh-keygen -t ed25519 -C "sync-tool" -f /root/.ssh/sync-tool_key
+ssh-keygen -t ed25519 -C "arcane-gitops" -f /root/.ssh/arcane-gitops_key
 
 # Add public key to GitHub/GitLab
-cat /root/.ssh/sync-tool_key.pub
+cat /root/.ssh/arcane-gitops_key.pub
 
 # Update config with key path
-sudo nano /etc/sync-tool/config.env
-# Add: GIT_SSH_KEY_PATH=/root/.ssh/sync-tool_key
+sudo nano /etc/arcane-gitops/config.env
+# Add: GIT_SSH_KEY_PATH=/root/.ssh/arcane-gitops_key
 ```
 
 ## Testing
 
 ```bash
 # Run once manually
-sudo systemctl start sync-tool.service
+sudo systemctl start arcane-gitops.service
 
 # Watch logs
-sudo journalctl -u sync-tool.service -f
+sudo journalctl -u arcane-gitops.service -f
 ```
 
 ## Common Commands

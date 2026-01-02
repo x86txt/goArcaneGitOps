@@ -9,9 +9,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-BINARY_NAME="sync-tool"
+BINARY_NAME="arcane-gitops"
 INSTALL_PATH="/usr/local/bin"
-CONFIG_PATH="/etc/sync-tool"
+CONFIG_PATH="/etc/arcane-gitops"
 SERVICE_PATH="/etc/systemd/system"
 
 print_info() {
@@ -107,7 +107,7 @@ create_config() {
         fi
     fi
     
-    print_info "Configuring sync-tool..."
+    print_info "Configuring arcane-gitops..."
     echo
     
     # Get repository path (with default)
@@ -282,7 +282,7 @@ ARCANE_API_KEY=${ARCANE_KEY}
 ARCANE_ENV_ID=${ENV_ID}
 
 # Log file location
-LOG_FILE=/var/log/sync-tool.log
+LOG_FILE=/var/log/arcane-gitops.log
 EOF
 
     # Add SSH key path if configured
@@ -337,8 +337,8 @@ EOF
 install_systemd_files() {
     print_info "Installing systemd service and timer..."
     
-    install -m 644 sync-tool.service ${SERVICE_PATH}/sync-tool.service
-    install -m 644 sync-tool.timer ${SERVICE_PATH}/sync-tool.timer
+    install -m 644 arcane-gitops.service ${SERVICE_PATH}/arcane-gitops.service
+    install -m 644 arcane-gitops.timer ${SERVICE_PATH}/arcane-gitops.timer
     
     systemctl daemon-reload
     print_success "Systemd files installed"
@@ -347,13 +347,13 @@ install_systemd_files() {
 enable_service() {
     print_info "Enabling and starting timer..."
     
-    systemctl enable sync-tool.timer
-    systemctl start sync-tool.timer
+    systemctl enable arcane-gitops.timer
+    systemctl start arcane-gitops.timer
     
     print_success "Timer enabled and started"
     echo
     print_info "Timer status:"
-    systemctl status sync-tool.timer --no-pager
+    systemctl status arcane-gitops.timer --no-pager
 }
 
 test_run() {
@@ -376,13 +376,13 @@ test_run() {
         fi
         
         print_info "Running test sync..."
-        if systemctl start sync-tool.service; then
+        if systemctl start arcane-gitops.service; then
             sleep 3
             print_info "Service logs:"
-            journalctl -u sync-tool.service -n 50 --no-pager
+            journalctl -u arcane-gitops.service -n 50 --no-pager
         else
             print_error "Failed to start service"
-            journalctl -u sync-tool.service -n 50 --no-pager
+            journalctl -u arcane-gitops.service -n 50 --no-pager
         fi
     fi
 }
@@ -396,21 +396,21 @@ print_next_steps() {
     echo "Next steps:"
     echo
     echo "1. Check timer status:"
-    echo "   systemctl status sync-tool.timer"
+    echo "   systemctl status arcane-gitops.timer"
     echo
     echo "2. View logs:"
-    echo "   journalctl -u sync-tool.service -f"
+    echo "   journalctl -u arcane-gitops.service -f"
     echo
     echo "3. Manual run:"
-    echo "   systemctl start sync-tool.service"
+    echo "   systemctl start arcane-gitops.service"
     echo
     echo "4. Edit configuration:"
     echo "   nano ${CONFIG_PATH}/config.env"
     echo
     echo "5. Adjust sync frequency:"
-    echo "   nano ${SERVICE_PATH}/sync-tool.timer"
+    echo "   nano ${SERVICE_PATH}/arcane-gitops.timer"
     echo "   systemctl daemon-reload"
-    echo "   systemctl restart sync-tool.timer"
+    echo "   systemctl restart arcane-gitops.timer"
     echo
 }
 
@@ -422,7 +422,7 @@ uninstall() {
 
     check_root
 
-    print_warning "This will remove sync-tool from your system"
+    print_warning "This will remove arcane-gitops from your system"
     echo
     read -p "Are you sure you want to uninstall? (y/n) [n]: " -n 1 -r
     echo
@@ -434,16 +434,16 @@ uninstall() {
 
     # Stop and disable the timer
     print_info "Stopping timer and service..."
-    systemctl stop sync-tool.timer 2>/dev/null || true
-    systemctl stop sync-tool.service 2>/dev/null || true
-    systemctl disable sync-tool.timer 2>/dev/null || true
-    systemctl disable sync-tool.service 2>/dev/null || true
+    systemctl stop arcane-gitops.timer 2>/dev/null || true
+    systemctl stop arcane-gitops.service 2>/dev/null || true
+    systemctl disable arcane-gitops.timer 2>/dev/null || true
+    systemctl disable arcane-gitops.service 2>/dev/null || true
     print_success "Service stopped and disabled"
 
     # Remove systemd files
     print_info "Removing systemd files..."
-    rm -f ${SERVICE_PATH}/sync-tool.service
-    rm -f ${SERVICE_PATH}/sync-tool.timer
+    rm -f ${SERVICE_PATH}/arcane-gitops.service
+    rm -f ${SERVICE_PATH}/arcane-gitops.timer
     systemctl daemon-reload
     print_success "Systemd files removed"
 
@@ -470,7 +470,7 @@ uninstall() {
     print_success "Uninstall complete!"
     echo "=========================================="
     echo
-    print_info "sync-tool has been removed from your system"
+    print_info "arcane-gitops has been removed from your system"
     if [[ -d ${CONFIG_PATH} ]]; then
         print_info "Configuration remains at ${CONFIG_PATH}"
     fi

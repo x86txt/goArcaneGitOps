@@ -8,15 +8,15 @@ User=root
 Group=root
 
 # Environment file with configuration
-EnvironmentFile=/etc/sync-tool/config.env
+EnvironmentFile=/etc/arcane-gitops/config.env
 
 # Execute the sync binary
-ExecStart=/usr/local/bin/sync-tool
+ExecStart=/usr/local/bin/arcane-gitops
 
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=sync-tool
+SyslogIdentifier=arcane-gitops
 
 # Security hardening
 NoNewPrivileges=true

@@ -1,9 +1,9 @@
 .PHONY: build install uninstall clean test run help
 
-BINARY_NAME=sync-tool
+BINARY_NAME=arcane-gitops
 INSTALL_PATH=/usr/local/bin
 SERVICE_PATH=/etc/systemd/system
-CONFIG_PATH=/etc/sync-tool
+CONFIG_PATH=/etc/arcane-gitops
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -29,8 +29,8 @@ install: build ## Install binary and systemd files (requires sudo)
 	sudo install -m 755 $(BINARY_NAME) $(INSTALL_PATH)/$(BINARY_NAME)
 	sudo install -d $(CONFIG_PATH)
 	sudo install -m 600 config.env.example $(CONFIG_PATH)/config.env.example
-	sudo install -m 644 sync-tool.service $(SERVICE_PATH)/sync-tool.service
-	sudo install -m 644 sync-tool.timer $(SERVICE_PATH)/sync-tool.timer
+	sudo install -m 644 arcane-gitops.service $(SERVICE_PATH)/arcane-gitops.service
+	sudo install -m 644 arcane-gitops.timer $(SERVICE_PATH)/arcane-gitops.timer
 	sudo systemctl daemon-reload
 	@echo "Installation complete!"
 	@echo ""
@@ -40,15 +40,15 @@ install: build ## Install binary and systemd files (requires sudo)
 	@echo "   sudo nano $(CONFIG_PATH)/config.env"
 	@echo ""
 	@echo "2. Enable and start the timer:"
-	@echo "   sudo systemctl enable sync-tool.timer"
-	@echo "   sudo systemctl start sync-tool.timer"
+	@echo "   sudo systemctl enable arcane-gitops.timer"
+	@echo "   sudo systemctl start arcane-gitops.timer"
 
 uninstall: ## Uninstall binary and systemd files (requires sudo)
 	@echo "Uninstalling $(BINARY_NAME)..."
-	sudo systemctl stop sync-tool.timer 2>/dev/null || true
-	sudo systemctl disable sync-tool.timer 2>/dev/null || true
-	sudo rm -f $(SERVICE_PATH)/sync-tool.service
-	sudo rm -f $(SERVICE_PATH)/sync-tool.timer
+	sudo systemctl stop arcane-gitops.timer 2>/dev/null || true
+	sudo systemctl disable arcane-gitops.timer 2>/dev/null || true
+	sudo rm -f $(SERVICE_PATH)/arcane-gitops.service
+	sudo rm -f $(SERVICE_PATH)/arcane-gitops.timer
 	sudo rm -f $(INSTALL_PATH)/$(BINARY_NAME)
 	sudo systemctl daemon-reload
 	@echo "Uninstall complete!"
@@ -66,50 +66,50 @@ install-dev: build ## Install binary only (for development)
 
 status: ## Check service and timer status
 	@echo "Timer status:"
-	@sudo systemctl status sync-tool.timer --no-pager || true
+	@sudo systemctl status arcane-gitops.timer --no-pager || true
 	@echo ""
 	@echo "Service status:"
-	@sudo systemctl status sync-tool.service --no-pager || true
+	@sudo systemctl status arcane-gitops.service --no-pager || true
 	@echo ""
 	@echo "Recent logs:"
-	@sudo journalctl -u sync-tool.service -n 20 --no-pager || true
+	@sudo journalctl -u arcane-gitops.service -n 20 --no-pager || true
 
 logs: ## Show service logs
-	sudo journalctl -u sync-tool.service -f
+	sudo journalctl -u arcane-gitops.service -f
 
 check-config: ## Verify configuration file
 	@echo "Checking configuration..."
-	@if [ -f /etc/sync-tool/config.env ]; then \
+	@if [ -f /etc/arcane-gitops/config.env ]; then \
 		echo "✓ Config file exists"; \
 		echo ""; \
 		echo "Config contents (API key masked):"; \
-		sudo cat /etc/sync-tool/config.env | sed 's/ARCANE_API_KEY=.*/ARCANE_API_KEY=***MASKED***/'; \
+		sudo cat /etc/arcane-gitops/config.env | sed 's/ARCANE_API_KEY=.*/ARCANE_API_KEY=***MASKED***/'; \
 		echo ""; \
 		echo "Required variables check:"; \
-		if grep -q "COMPOSE_REPO_PATH=" /etc/sync-tool/config.env; then \
+		if grep -q "COMPOSE_REPO_PATH=" /etc/arcane-gitops/config.env; then \
 			echo "✓ COMPOSE_REPO_PATH is set"; \
 		else \
 			echo "✗ COMPOSE_REPO_PATH is missing!"; \
 		fi; \
-		if grep -q "ARCANE_BASE_URL=" /etc/sync-tool/config.env; then \
+		if grep -q "ARCANE_BASE_URL=" /etc/arcane-gitops/config.env; then \
 			echo "✓ ARCANE_BASE_URL is set"; \
 		else \
 			echo "✗ ARCANE_BASE_URL is missing!"; \
 		fi; \
-		if grep -q "ARCANE_API_KEY=" /etc/sync-tool/config.env; then \
+		if grep -q "ARCANE_API_KEY=" /etc/arcane-gitops/config.env; then \
 			echo "✓ ARCANE_API_KEY is set"; \
 		else \
 			echo "✗ ARCANE_API_KEY is missing!"; \
 		fi; \
 	else \
-		echo "✗ Config file not found at /etc/sync-tool/config.env"; \
+		echo "✗ Config file not found at /etc/arcane-gitops/config.env"; \
 		exit 1; \
 	fi
 
 test-api: ## Test Arcane API connection
 	@echo "Testing Arcane API connection..."
-	@if [ -f /etc/sync-tool/config.env ]; then \
-		. /etc/sync-tool/config.env && \
+	@if [ -f /etc/arcane-gitops/config.env ]; then \
+		. /etc/arcane-gitops/config.env && \
 		curl -s -o /dev/null -w "HTTP Status: %{http_code}\n" \
 			-H "X-Api-Key: $$ARCANE_API_KEY" \
 			-H "Authorization: Bearer $$ARCANE_API_KEY" \
