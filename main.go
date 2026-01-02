@@ -117,9 +117,7 @@ func (c *ArcaneAPIClient) doRequest(method, endpoint string, body interface{}) (
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			// Log but don't fail on close error
-		}
+		_ = resp.Body.Close() // Ignore close errors
 	}()
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -864,11 +862,12 @@ func getEnvOrDefault(key, defaultValue string) string {
 func setupGitAuth(authMethod, sshKeyPath, httpsToken string) {
 	authMethod = strings.ToLower(authMethod)
 
-	if authMethod == "ssh" {
+	switch authMethod {
+	case "ssh":
 		setupGitSSH(sshKeyPath)
-	} else if authMethod == "https" {
+	case "https":
 		setupGitHTTPS(httpsToken)
-	} else {
+	default:
 		logWarning(fmt.Sprintf("Unknown git auth method: %s, defaulting to SSH", authMethod))
 		setupGitSSH(sshKeyPath)
 	}
