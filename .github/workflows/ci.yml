@@ -27,7 +27,7 @@ jobs:
           fi
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v4
         with:
           version: latest
           args: --timeout=5m
@@ -75,8 +75,8 @@ jobs:
         continue-on-error: true
 
       - name: Upload SARIF file to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        if: hashFiles('gosec.sarif') != ''
         with:
           sarif_file: 'gosec.sarif'
           wait-for-processing: true

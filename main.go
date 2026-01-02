@@ -719,8 +719,12 @@ func getGitStatus(branch string) (*GitStatus, error) {
 	// Parse output: "behind ahead"
 	counts := strings.Fields(strings.TrimSpace(string(output)))
 	if len(counts) == 2 {
-		fmt.Sscanf(counts[0], "%d", &status.Behind)
-		fmt.Sscanf(counts[1], "%d", &status.Ahead)
+		if _, err := fmt.Sscanf(counts[0], "%d", &status.Behind); err != nil {
+			logWarning(fmt.Sprintf("failed to parse behind count: %v", err))
+		}
+		if _, err := fmt.Sscanf(counts[1], "%d", &status.Ahead); err != nil {
+			logWarning(fmt.Sprintf("failed to parse ahead count: %v", err))
+		}
 	}
 
 	// Check for local changes
