@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Run gofmt
+        run: |
+          if [ "$(gofmt -s -l . | grep -E '\.go$' | wc -l)" -gt 0 ]; then
+            echo "The following files need formatting:"
+            gofmt -s -d . | grep -E '\.go$'
+            exit 1
+          fi
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run go mod verify
+        run: go mod verify
+
+      - name: Run go mod tidy check
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum || (echo "go.mod or go.sum needs to be updated. Run 'go mod tidy'" && exit 1)
+
+      - name: Build
+        run: go build -v -o sync-tool ./main.go
+
+      - name: Run tests
+        run: go test -v -race ./...
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
+        with:
+          args: './...'
+          format: 'sarif'
+          output: 'gosec.sarif'
+          severity: 'medium'
+          confidence: 'medium'
+        continue-on-error: true
+
+      - name: Upload SARIF file to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'gosec.sarif'
+          wait-for-processing: true
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+        continue-on-error: true
+
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Run ineffassign
+        run: |
+          go install github.com/gordonklaus/ineffassign@latest
+          ineffassign ./...
+
+      - name: Run misspell
+        run: |
+          go install github.com/client9/misspell/cmd/misspell@latest
+          misspell -error .
+
+      - name: Run errcheck
+        run: |
+          go install github.com/kisielk/errcheck@latest
+          errcheck ./... || true

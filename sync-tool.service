@@ -1,0 +1,26 @@
+[Unit]
+Description=Docker Compose Git Sync and Arcane Deploy
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+
+# Environment file with configuration
+EnvironmentFile=/etc/sync-tool/config.env
+
+# Execute the sync binary
+ExecStart=/usr/local/bin/sync-tool
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sync-tool
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

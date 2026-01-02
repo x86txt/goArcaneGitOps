@@ -1,0 +1,14 @@
+[Unit]
+Description=Run Docker Compose Sync every 5 minutes
+Requires=sync-tool.service
+
+[Timer]
+# Run every 5 minutes
+OnCalendar=*:0/5
+# Run 30 seconds after boot if we missed a scheduled run
+OnBootSec=30sec
+# If the job takes longer than expected, don't queue up multiple runs
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,194 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - goos: linux
+            goarch: amd64
+            archive: tar.gz
+          - goos: linux
+            goarch: arm64
+            archive: tar.gz
+          - goos: linux
+            goarch: riscv64
+            archive: tar.gz
+          # macOS
+          - goos: darwin
+            goarch: amd64
+            archive: tar.gz
+          - goos: darwin
+            goarch: arm64
+            archive: tar.gz
+          # Windows
+          - goos: windows
+            goarch: amd64
+            archive: zip
+            binary_ext: .exe
+          - goos: windows
+            goarch: arm64
+            archive: zip
+            binary_ext: .exe
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+      
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+      
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          BINARY_NAME="sync-tool${{ matrix.binary_ext || '' }}"
+          OUTPUT_DIR="dist/sync-tool-${GOOS}-${GOARCH}"
+          mkdir -p "$OUTPUT_DIR"
+          go build -ldflags="-s -w" -o "$OUTPUT_DIR/$BINARY_NAME" ./main.go
+          echo "Built: $OUTPUT_DIR/$BINARY_NAME"
+      
+      - name: Create archive
+        run: |
+          cd dist
+          ARCHIVE_NAME="sync-tool-${{ steps.version.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          DIR_NAME="sync-tool-${{ matrix.goos }}-${{ matrix.goarch }}"
+          
+          if [ "${{ matrix.archive }}" = "tar.gz" ]; then
+            tar -czf "${ARCHIVE_NAME}.tar.gz" "$DIR_NAME/"
+            echo "archive_path=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_OUTPUT
+          else
+            cd "$DIR_NAME/"
+            zip -r "../${ARCHIVE_NAME}.zip" .
+            cd ..
+            echo "archive_path=${ARCHIVE_NAME}.zip" >> $GITHUB_OUTPUT
+          fi
+          echo "archive_name=${ARCHIVE_NAME}" >> $GITHUB_OUTPUT
+        id: archive
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.archive.outputs.archive_name }}
+          path: dist/${{ steps.archive.outputs.archive_path }}
+          retention-days: 30
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: sync-tool-*
+          merge-multiple: false
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "This appears to be the first release"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$TAG")
+          else
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG..$TAG")
+          fi
+          
+          {
+            echo "## Changelog"
+            echo ""
+            echo "### Version ${{ steps.version.outputs.version }}"
+            echo ""
+            if [ -n "$CHANGELOG" ]; then
+              echo "$CHANGELOG"
+            else
+              echo "No changes found in git log."
+            fi
+            echo ""
+            echo "## Downloads"
+            echo ""
+            echo "Download the appropriate archive for your platform:"
+            echo ""
+            echo "| Platform | Architecture | Download |"
+            echo "|----------|-------------|----------|"
+          } > release_notes.md
+          
+          # Add download table rows
+          for file in dist/*.tar.gz dist/*.zip; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              size=$(du -h "$file" | cut -f1)
+              # Extract platform and arch from filename
+              # sync-tool-v1.0.0-linux-amd64.tar.gz
+              if [[ "$filename" =~ sync-tool-.*-([^-]+)-([^.]+)\.(tar\.gz|zip) ]]; then
+                platform="${BASH_REMATCH[1]}"
+                arch="${BASH_REMATCH[2]}"
+                echo "| $platform | $arch | \`$filename\` ($size) |" >> release_notes.md
+              fi
+            fi
+          done
+          
+          echo "" >> release_notes.md
+          echo "## Installation" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "Extract the archive and copy the \`sync-tool\` binary to your PATH:" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "\`\`\`bash" >> release_notes.md
+          echo "# Linux/macOS" >> release_notes.md
+          echo "tar -xzf sync-tool-${{ steps.version.outputs.version }}-linux-amd64.tar.gz" >> release_notes.md
+          echo "sudo install -m 755 sync-tool-linux-amd64/sync-tool /usr/local/bin/" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "# Windows" >> release_notes.md
+          echo "# Extract the ZIP file and add to your PATH" >> release_notes.md
+          echo "\`\`\`" >> release_notes.md
+          
+          cat release_notes.md
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*.tar.gz dist/*.zip
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
