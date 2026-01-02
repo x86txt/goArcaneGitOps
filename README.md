@@ -28,10 +28,12 @@ A GitOps-style sync tool that automatically synchronizes Docker Compose projects
 
 ## Installation
 
+> [!TIP]
+> **Quick start**: `git clone https://github.com/x86txt/goArcaneGitOps.git && cd goArcaneGitOps && sudo ./install.sh`
+
 ### Quick Install (Interactive)
 
 ```bash
-cd syncTool
 sudo ./install.sh
 ```
 
