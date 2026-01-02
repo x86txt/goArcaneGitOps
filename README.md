@@ -1,5 +1,9 @@
 # Sync Tool - Docker Compose GitOps for Arcane
 
+[![CI Lint & Test](https://github.com/x86txt/goArcaneGitOps/actions/workflows/ci.yml/badge.svg)](https://github.com/x86txt/goArcaneGitOps/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/x86txt/goArcaneGitOps)](https://goreportcard.com/report/github.com/x86txt/goArcaneGitOps)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A GitOps-style sync tool that automatically synchronizes Docker Compose projects from a Git repository to [Arcane](https://getarcane.app).
 
 ## Features
