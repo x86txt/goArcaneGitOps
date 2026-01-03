@@ -1,511 +1,632 @@
 #!/bin/bash
+
+#############################################################################
+# Arcane GitOps Installer
+# Detects system architecture, downloads the correct binary, and configures
+#
+# Features:
+#   - Automatic platform detection (Linux/macOS/Windows, multiple architectures)
+#   - Downloads latest release from GitHub
+#   - Interactive configuration with optional gum support for enhanced UX
+#   - Systemd service installation and configuration
+#   - Accessibility: --no-unicode and --no-color flags for compatibility
+#   - Performance optimized: minimal dependencies, non-blocking operations
+#
+# Usage:
+#   sudo ./install.sh                    # Standard installation
+#   sudo ./install.sh --no-unicode       # ASCII-only mode (for older terminals)
+#   sudo ./install.sh --no-color         # Disable colors (for screen readers)
+#   sudo ./install.sh --help             # Show help
+#
+# Requirements:
+#   - curl or wget (for downloading)
+#   - systemd (for service installation)
+#   - Optional: gum (for enhanced interactive prompts)
+#
+#############################################################################
+
 set -e
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+#############################################################################
+# Parse Command Line Arguments
+#############################################################################
 
-# Configuration
-BINARY_NAME="arcane-gitops"
-INSTALL_PATH="/usr/local/bin"
-CONFIG_PATH="/etc/arcane-gitops"
-SERVICE_PATH="/etc/systemd/system"
+USE_UNICODE=true
+USE_COLOR=true
 
-print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --no-unicode)
+            USE_UNICODE=false
+            shift
+            ;;
+        --no-color)
+            USE_COLOR=false
+            shift
+            ;;
+        --help)
+            echo "Arcane GitOps Installer"
+            echo ""
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --no-unicode    Use ASCII characters instead of Unicode"
+            echo "  --no-color      Disable colored output"
+            echo "  --help          Show this help message"
+            echo ""
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Run '$0 --help' for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Color codes for pretty output (conditionally enabled)
+if [ "$USE_COLOR" = true ]; then
+    readonly RED='\033[0;31m'
+    readonly GREEN='\033[0;32m'
+    readonly YELLOW='\033[1;33m'
+    readonly BLUE='\033[0;34m'
+    readonly MAGENTA='\033[0;35m'
+    readonly CYAN='\033[0;36m'
+    readonly BOLD='\033[1m'
+    readonly DIM='\033[2m'
+    readonly NC='\033[0m' # No Color
+else
+    readonly RED=''
+    readonly GREEN=''
+    readonly YELLOW=''
+    readonly BLUE=''
+    readonly MAGENTA=''
+    readonly CYAN=''
+    readonly BOLD=''
+    readonly DIM=''
+    readonly NC=''
+fi
+
+# Unicode or ASCII characters for visual enhancement
+if [ "$USE_UNICODE" = true ]; then
+    readonly CHECK="✓"
+    readonly CROSS="✗"
+    readonly ARROW="→"
+    readonly BULLET="•"
+    readonly STAR="★"
+    readonly BOX_H="═"
+    readonly BOX_V="║"
+    readonly BOX_TL="╔"
+    readonly BOX_TR="╗"
+    readonly BOX_BL="╚"
+    readonly BOX_BR="╝"
+    readonly SPINNER_CHARS='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    readonly PROGRESS_FULL="█"
+    readonly PROGRESS_EMPTY="░"
+else
+    readonly CHECK="[OK]"
+    readonly CROSS="[X]"
+    readonly ARROW="->"
+    readonly BULLET="*"
+    readonly STAR="*"
+    readonly BOX_H="="
+    readonly BOX_V="|"
+    readonly BOX_TL="+"
+    readonly BOX_TR="+"
+    readonly BOX_BL="+"
+    readonly BOX_BR="+"
+    readonly SPINNER_CHARS='|/-\\'
+    readonly PROGRESS_FULL="#"
+    readonly PROGRESS_EMPTY="-"
+fi
+
+# GitHub repository information
+readonly GITHUB_REPO="x86txt/goArcaneGitOps"
+readonly BINARY_NAME="arcane-gitops"
+readonly CONFIG_DIR="/etc/arcane-gitops"
+readonly CONFIG_FILE="${CONFIG_DIR}/config.env"
+readonly INSTALL_DIR="/usr/local/bin"
+
+#############################################################################
+# Helper Functions
+#############################################################################
+
+# Print functions with visual flair
+print_header() {
+    local box_width=62
+    local title=" ${STAR} Arcane GitOps Installer "
+    local padding=$(( (box_width - ${#title}) / 2 ))
+
+    echo -e "\n${BOLD}${MAGENTA}${BOX_TL}$(printf '%*s' $box_width '' | tr ' ' "${BOX_H}")${BOX_TR}${NC}"
+    echo -e "${BOLD}${MAGENTA}${BOX_V}${NC}$(printf '%*s' $padding '')${CYAN}${title}${NC}$(printf '%*s' $padding '')${BOLD}${MAGENTA}${BOX_V}${NC}"
+    echo -e "${BOLD}${MAGENTA}${BOX_BL}$(printf '%*s' $box_width '' | tr ' ' "${BOX_H}")${BOX_BR}${NC}\n"
+}
+
+print_section() {
+    echo -e "\n${BOLD}${BLUE}${ARROW} $1${NC}"
+    if [ "$USE_UNICODE" = true ]; then
+        echo -e "${DIM}────────────────────────────────────────────────────────────${NC}"
+    else
+        echo -e "${DIM}------------------------------------------------------------${NC}"
+    fi
 }
 
 print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
-
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    echo -e "${GREEN}${CHECK}${NC} $1"
 }
 
 print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}${CROSS}${NC} $1"
 }
 
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        print_error "This script must be run as root or with sudo"
-        exit 1
-    fi
+print_warning() {
+    echo -e "${YELLOW}${BULLET}${NC} $1"
 }
 
-check_go() {
-    if ! command -v go &> /dev/null; then
-        print_error "Go is not installed. Please install Go 1.21+ first."
-        echo "Visit: https://golang.org/doc/install"
+print_info() {
+    echo -e "${CYAN}${BULLET}${NC} $1"
+}
+
+print_step() {
+    echo -e "  ${DIM}${ARROW}${NC} $1"
+}
+
+# Spinner for long-running operations (non-blocking)
+spinner() {
+    local pid=$1
+    local delay=0.1
+    local spinstr="${SPINNER_CHARS}"
+    local spin_msg="${2:-Processing}"
+
+    while kill -0 $pid 2>/dev/null; do
+        local temp=${spinstr#?}
+        printf "\r  ${CYAN}%c${NC} ${spin_msg}..." "$spinstr"
+        spinstr=$temp${spinstr%"$temp"}
+        sleep $delay
+    done
+    printf "\r%60s\r" ""  # Clear the line
+}
+
+# Progress bar
+progress_bar() {
+    local current=$1
+    local total=$2
+    local width=50
+    local percentage=$((current * 100 / total))
+    local completed=$((width * current / total))
+    local remaining=$((width - completed))
+
+    printf "\r  ${CYAN}["
+    printf "%${completed}s" | tr ' ' "${PROGRESS_FULL}"
+    printf "%${remaining}s" | tr ' ' "${PROGRESS_EMPTY}"
+    printf "]${NC} ${BOLD}%3d%%${NC}" $percentage
+}
+
+#############################################################################
+# System Detection
+#############################################################################
+
+detect_system() {
+    print_section "Detecting System Architecture"
+    
+    # Detect OS
+    case "$(uname -s)" in
+        Linux*)
+            OS="linux"
+            print_info "Operating System: ${BOLD}Linux${NC}"
+            ;;
+        Darwin*)
+            OS="darwin"
+            print_info "Operating System: ${BOLD}macOS${NC}"
+            ;;
+        MINGW*|MSYS*|CYGWIN*)
+            OS="windows"
+            print_info "Operating System: ${BOLD}Windows${NC}"
+            ;;
+        *)
+            print_error "Unsupported operating system: $(uname -s)"
+            exit 1
+            ;;
+    esac
+    
+    # Detect Architecture
+    case "$(uname -m)" in
+        x86_64|amd64)
+            ARCH="amd64"
+            print_info "Architecture: ${BOLD}x86_64${NC}"
+            ;;
+        aarch64|arm64)
+            ARCH="arm64"
+            print_info "Architecture: ${BOLD}ARM64${NC}"
+            ;;
+        armv7l)
+            ARCH="armv7"
+            print_info "Architecture: ${BOLD}ARMv7${NC}"
+            ;;
+        *)
+            print_error "Unsupported architecture: $(uname -m)"
+            exit 1
+            ;;
+    esac
+    
+    PLATFORM="${OS}_${ARCH}"
+    print_success "Platform detected: ${BOLD}${PLATFORM}${NC}"
+}
+
+#############################################################################
+# Download Binary
+#############################################################################
+
+get_latest_release() {
+    print_section "Fetching Latest Release Information"
+    
+    # Try to get latest release from GitHub API
+    print_step "Querying GitHub API..."
+    
+    if command -v curl >/dev/null 2>&1; then
+        LATEST_VERSION=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    elif command -v wget >/dev/null 2>&1; then
+        LATEST_VERSION=$(wget -qO- "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    else
+        print_error "Neither curl nor wget found. Please install one of them."
         exit 1
     fi
     
-    GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
-    print_success "Go ${GO_VERSION} found"
-}
-
-check_git() {
-    if ! command -v git &> /dev/null; then
-        print_error "Git is not installed. Please install git first."
+    if [ -z "$LATEST_VERSION" ]; then
+        print_error "Failed to fetch latest release version"
         exit 1
     fi
-    print_success "Git found"
+    
+    print_success "Latest version: ${BOLD}${LATEST_VERSION}${NC}"
 }
 
-build_binary() {
-    print_info "Building ${BINARY_NAME}..."
-    go build -ldflags="-s -w" -o ${BINARY_NAME} main.go
-    print_success "Build complete"
+download_binary() {
+    print_section "Downloading Binary"
+    
+    # Construct download URL
+    BINARY_FILENAME="${BINARY_NAME}_${PLATFORM}"
+    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/${BINARY_FILENAME}"
+    
+    print_info "Download URL: ${DIM}${DOWNLOAD_URL}${NC}"
+    
+    # Create temporary directory
+    TMP_DIR=$(mktemp -d)
+    TMP_BINARY="${TMP_DIR}/${BINARY_NAME}"
+    
+    print_step "Downloading to temporary location..."
+    
+    # Download with progress indicator
+    if command -v curl >/dev/null 2>&1; then
+        if curl -L --fail --progress-bar "${DOWNLOAD_URL}" -o "${TMP_BINARY}" 2>&1 | \
+           while IFS= read -r line; do
+               if [[ $line =~ ([0-9]+\.[0-9]+)% ]]; then
+                   percentage=${BASH_REMATCH[1]}
+                   # Simple progress indicator
+                   printf "\r  ${CYAN}Downloading...${NC} ${BOLD}%.1f%%${NC}" "$percentage"
+               fi
+           done; then
+            printf "\r%80s\r" ""  # Clear line
+            print_success "Binary downloaded successfully"
+        else
+            print_error "Failed to download binary from ${DOWNLOAD_URL}"
+            print_warning "Please check if the release exists for your platform"
+            rm -rf "${TMP_DIR}"
+            exit 1
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if wget --show-progress --progress=bar:force "${DOWNLOAD_URL}" -O "${TMP_BINARY}" 2>&1 | \
+           while IFS= read -r line; do
+               printf "\r  ${CYAN}${line}${NC}"
+           done; then
+            printf "\r%80s\r" ""  # Clear line
+            print_success "Binary downloaded successfully"
+        else
+            print_error "Failed to download binary from ${DOWNLOAD_URL}"
+            rm -rf "${TMP_DIR}"
+            exit 1
+        fi
+    fi
+    
+    # Verify download
+    if [ ! -f "${TMP_BINARY}" ] || [ ! -s "${TMP_BINARY}" ]; then
+        print_error "Downloaded file is empty or doesn't exist"
+        rm -rf "${TMP_DIR}"
+        exit 1
+    fi
+    
+    # Make executable
+    chmod +x "${TMP_BINARY}"
+    print_success "Binary made executable"
+}
+
+#############################################################################
+# Installation
+#############################################################################
+
+check_root() {
+    if [ "$EUID" -ne 0 ]; then
+        print_error "This installer must be run as root"
+        echo -e "\n${YELLOW}Please run: ${BOLD}sudo $0${NC}\n"
+        exit 1
+    fi
 }
 
 install_binary() {
-    print_info "Installing binary to ${INSTALL_PATH}..."
-    install -m 755 ${BINARY_NAME} ${INSTALL_PATH}/${BINARY_NAME}
-    print_success "Binary installed"
+    print_section "Installing Binary"
+    
+    print_step "Installing to ${INSTALL_DIR}/${BINARY_NAME}..."
+    
+    # Backup existing binary if it exists
+    if [ -f "${INSTALL_DIR}/${BINARY_NAME}" ]; then
+        BACKUP="${INSTALL_DIR}/${BINARY_NAME}.backup.$(date +%Y%m%d_%H%M%S)"
+        mv "${INSTALL_DIR}/${BINARY_NAME}" "${BACKUP}"
+        print_info "Backed up existing binary to ${BACKUP}"
+    fi
+    
+    # Install new binary
+    install -m 755 "${TMP_BINARY}" "${INSTALL_DIR}/${BINARY_NAME}"
+    print_success "Binary installed to ${BOLD}${INSTALL_DIR}/${BINARY_NAME}${NC}"
+    
+    # Verify installation
+    if [ -x "${INSTALL_DIR}/${BINARY_NAME}" ]; then
+        VERSION=$(${INSTALL_DIR}/${BINARY_NAME} --version 2>/dev/null || echo "unknown")
+        print_success "Installation verified (version: ${VERSION})"
+    fi
 }
 
-create_config() {
-    print_info "Creating configuration directory..."
-    mkdir -p ${CONFIG_PATH}
+configure_service() {
+    print_section "Configuring System Service"
 
-    # If an existing config is present, use it to pre-fill defaults (press Enter to keep them)
-    EXISTING_REPO_PATH=""
-    EXISTING_ARCANE_URL=""
-    EXISTING_ARCANE_KEY=""
-    EXISTING_ENV_ID=""
-    EXISTING_GIT_AUTH_METHOD=""
-    EXISTING_GIT_SSH_KEY_PATH=""
-    EXISTING_GIT_HTTPS_TOKEN=""
-    if [[ -f "${CONFIG_PATH}/config.env" ]]; then
-        # shellcheck disable=SC1090
-        source "${CONFIG_PATH}/config.env"
-        EXISTING_REPO_PATH="${COMPOSE_REPO_PATH:-}"
-        EXISTING_ARCANE_URL="${ARCANE_BASE_URL:-}"
-        EXISTING_ARCANE_KEY="${ARCANE_API_KEY:-}"
-        EXISTING_ENV_ID="${ARCANE_ENV_ID:-}"
-        EXISTING_GIT_AUTH_METHOD="${GIT_AUTH_METHOD:-}"
-        EXISTING_GIT_SSH_KEY_PATH="${GIT_SSH_KEY_PATH:-}"
-        EXISTING_GIT_HTTPS_TOKEN="${GIT_HTTPS_TOKEN:-}"
+    # Create config directory
+    print_step "Creating configuration directory..."
+    mkdir -p "${CONFIG_DIR}"
+    print_success "Config directory created: ${CONFIG_DIR}"
 
-        # Legacy default from older versions (CLI used "default"); Arcane API typically uses "0"
-        if [[ "$EXISTING_ENV_ID" == "default" ]]; then
-            EXISTING_ENV_ID=""
-        fi
-    fi
-    
-    if [[ -f "${CONFIG_PATH}/config.env" ]]; then
-        print_warning "Configuration file already exists at ${CONFIG_PATH}/config.env"
-        read -p "Would you like to reconfigure? (y/n) [n]: " -n 1 -r
-        echo
-        REPLY=${REPLY:-n}
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            return
-        fi
-    fi
-    
-    print_info "Configuring arcane-gitops..."
-    echo
-    
-    # Get repository path (with default)
-    DEFAULT_REPO_PATH="${EXISTING_REPO_PATH:-/opt/docker}"
-    read -p "Enter the path to your docker compose git repository [$DEFAULT_REPO_PATH]: " REPO_PATH_INPUT
-    REPO_PATH=${REPO_PATH_INPUT:-$DEFAULT_REPO_PATH}
-    
-    if [[ ! -d "$REPO_PATH" ]]; then
-        print_warning "Directory $REPO_PATH does not exist"
-        read -p "Continue anyway? (y/n) [n]: " -n 1 -r
-        echo
-        REPLY=${REPLY:-n}
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            print_error "Installation cancelled. Please create the directory or use a different path."
-            exit 1
-        fi
-    fi
-
-    echo
-    print_info "Arcane API Configuration"
-    print_info "You need to create an API key in Arcane: Settings → API Keys → Add API Key"
-    echo
-    
-    # Arcane API URL (with default)
-    DEFAULT_ARCANE_URL="${EXISTING_ARCANE_URL:-http://localhost:3552}"
-    read -p "Enter your Arcane API URL [$DEFAULT_ARCANE_URL]: " ARCANE_URL_INPUT
-    ARCANE_URL=${ARCANE_URL_INPUT:-$DEFAULT_ARCANE_URL}
-
-    # Normalize URL:
-    # - strip trailing slash
-    # - if user accidentally includes /api, strip it (our tool appends /api)
-    ARCANE_URL="${ARCANE_URL%/}"
-    if [[ "$ARCANE_URL" == */api ]]; then
-        ARCANE_URL="${ARCANE_URL%/api}"
-    fi
-    
-    # Arcane API Key (required, hidden input). If reconfiguring and a key exists, allow Enter to keep it.
-    if [[ -n "$EXISTING_ARCANE_KEY" ]]; then
-        read -s -p "Enter your Arcane API key [press Enter to keep existing]: " ARCANE_KEY_INPUT
-        echo
-        ARCANE_KEY=${ARCANE_KEY_INPUT:-$EXISTING_ARCANE_KEY}
-    fi
-
-    while [[ -z "${ARCANE_KEY:-}" ]]; do
-        read -s -p "Enter your Arcane API key: " ARCANE_KEY
-        echo
-        if [[ -z "$ARCANE_KEY" ]]; then
-            print_error "Arcane API key is required!"
-        fi
-    done
-    
-    # Arcane Environment ID
-    # NOTE: Arcane commonly uses numeric environment IDs like "0".
-    DEFAULT_ENV_ID="${EXISTING_ENV_ID:-0}"
-    read -p "Enter your Arcane environment ID [$DEFAULT_ENV_ID]: " ENV_ID_INPUT
-    ENV_ID=${ENV_ID_INPUT:-$DEFAULT_ENV_ID}
-    
-    # Test API connection
-    echo
-    print_info "Testing Arcane API connection..."
-    ENVIRONMENTS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-        -H "X-Api-Key: $ARCANE_KEY" \
-        -H "Authorization: Bearer $ARCANE_KEY" \
-        "$ARCANE_URL/api/environments" 2>/dev/null || echo "000")
-    PROJECTS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-        -H "X-Api-Key: $ARCANE_KEY" \
-        -H "Authorization: Bearer $ARCANE_KEY" \
-        "$ARCANE_URL/api/environments/$ENV_ID/projects" 2>/dev/null || echo "000")
-
-    if [[ "$PROJECTS_STATUS" == "200" ]]; then
-        print_success "Successfully connected to Arcane API!"
+    # Interactive configuration with gum support
+    echo -e "\n${BOLD}${CYAN}Configuration Setup${NC}"
+    if [ "$USE_UNICODE" = true ]; then
+        echo -e "${DIM}────────────────────────────────────────────────────────────${NC}"
     else
-        print_warning "Could not connect to Arcane API (environments: HTTP $ENVIRONMENTS_STATUS, projects: HTTP $PROJECTS_STATUS)"
-        if [[ "$PROJECTS_STATUS" == "404" ]]; then
-            print_warning "HTTP 404 usually means your environment ID '$ENV_ID' does not exist."
-            print_info "Tip: Arcane commonly uses environment ID '0'. You can list environments with:"
-            print_info "  curl -H \"X-Api-Key: <your-key>\" -H \"Authorization: Bearer <your-key>\" \"$ARCANE_URL/api/environments\""
-        elif [[ "$ENVIRONMENTS_STATUS" == "404" ]]; then
-            print_warning "HTTP 404 on /api/environments usually means your base URL is wrong (or you included '/api' in the URL)."
-            print_info "Use the root server URL, like: http://<host>:3552 (not .../api)"
-        elif [[ "$ENVIRONMENTS_STATUS" == "401" || "$ENVIRONMENTS_STATUS" == "403" ]]; then
-            print_warning "Authentication failed. Please verify your API key is valid and has access."
-        elif [[ "$ENVIRONMENTS_STATUS" == "000" || "$PROJECTS_STATUS" == "000" ]]; then
-            print_warning "Connection failed. Please verify the server URL is reachable from this machine."
-        fi
-
-        read -p "Continue anyway? (y/n) [n]: " -n 1 -r
-        echo
-        REPLY=${REPLY:-n}
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
+        echo -e "${DIM}------------------------------------------------------------${NC}"
     fi
-    
-    echo
-    print_info "Projects will be auto-detected from folder names in ${REPO_PATH}"
-    print_info "Ensure your folder names match your Arcane project names"
-    print_info "Example: ${REPO_PATH}/zerobyte/compose.yaml → Arcane project 'zerobyte'"
-    echo
 
-    # Git Authentication Configuration
-    print_info "Git Authentication Configuration"
-    print_info "Choose how to authenticate with your Git repository:"
-    print_info "1. SSH (using private key) - recommended for automated systems"
-    print_info "2. HTTPS (using GitHub personal access token)"
-    echo
-
-    DEFAULT_AUTH_METHOD="${EXISTING_GIT_AUTH_METHOD:-ssh}"
-    read -p "Select authentication method (ssh/https) [$DEFAULT_AUTH_METHOD]: " AUTH_METHOD_INPUT
-    AUTH_METHOD=${AUTH_METHOD_INPUT:-$DEFAULT_AUTH_METHOD}
-
-    # Normalize input
-    AUTH_METHOD=$(echo "$AUTH_METHOD" | tr '[:upper:]' '[:lower:]')
-
-    SSH_KEY_PATH=""
-    HTTPS_TOKEN=""
-
-    if [[ "$AUTH_METHOD" == "ssh" ]]; then
-        DEFAULT_SSH_KEY_PATH="${EXISTING_GIT_SSH_KEY_PATH:-/root/.ssh/id_rsa}"
-        read -p "Enter the path to your SSH private key [$DEFAULT_SSH_KEY_PATH]: " SSH_KEY_INPUT
-        SSH_KEY_PATH=${SSH_KEY_INPUT:-$DEFAULT_SSH_KEY_PATH}
-
-        if [[ ! -f "$SSH_KEY_PATH" ]]; then
-            print_warning "SSH key file not found at ${SSH_KEY_PATH}"
-            print_warning "Make sure to create it before running the service"
-        else
-            print_success "SSH key configured: ${SSH_KEY_PATH}"
-        fi
-    elif [[ "$AUTH_METHOD" == "https" ]]; then
-        print_info "GitHub Personal Access Token:"
-        print_info "Create a token at: https://github.com/settings/tokens"
-        print_info "Required scopes: repo (full control of private repositories)"
-        echo
-
-        if [[ -n "$EXISTING_GIT_HTTPS_TOKEN" ]]; then
-            read -s -p "Enter your GitHub personal access token [press Enter to keep existing]: " HTTPS_TOKEN_INPUT
-            echo
-            HTTPS_TOKEN=${HTTPS_TOKEN_INPUT:-$EXISTING_GIT_HTTPS_TOKEN}
-        fi
-
-        while [[ -z "${HTTPS_TOKEN:-}" ]]; do
-            read -s -p "Enter your GitHub personal access token: " HTTPS_TOKEN
-            echo
-            if [[ -z "$HTTPS_TOKEN" ]]; then
-                print_error "GitHub personal access token is required!"
+    # Check if gum is available for enhanced prompts
+    local HAS_GUM=false
+    if command -v gum >/dev/null 2>&1; then
+        HAS_GUM=true
+        print_info "Using enhanced prompts (gum detected)"
+    else
+        # Offer to install gum for better experience
+        echo ""
+        read -p "$(echo -e ${CYAN}${BULLET}${NC}) Install 'gum' for enhanced prompts? (y/N): " INSTALL_GUM
+        if [[ "$INSTALL_GUM" =~ ^[Yy]$ ]]; then
+            print_step "Installing gum..."
+            if command -v go >/dev/null 2>&1; then
+                if go install github.com/charmbracelet/gum@latest 2>/dev/null; then
+                    # Add Go bin to PATH if needed
+                    export PATH="$PATH:$(go env GOPATH)/bin"
+                    if command -v gum >/dev/null 2>&1; then
+                        HAS_GUM=true
+                        print_success "Gum installed successfully"
+                    else
+                        print_warning "Gum installed but not found in PATH. Using standard prompts."
+                    fi
+                else
+                    print_warning "Failed to install gum. Using standard prompts."
+                fi
+            else
+                print_warning "Go not found. Cannot install gum. Using standard prompts."
+                print_info "Visit https://github.com/charmbracelet/gum for installation instructions"
             fi
-        done
+        fi
+    fi
 
-        print_success "GitHub HTTPS authentication configured"
+    # Repository path
+    if [ "$HAS_GUM" = true ]; then
+        REPO_PATH=$(gum input \
+            --placeholder "/opt/docker" \
+            --prompt "${BULLET} Git repository path: " \
+            --value "/opt/docker" \
+            --width 60)
     else
-        print_error "Invalid authentication method. Using default (ssh)"
-        AUTH_METHOD="ssh"
-        DEFAULT_SSH_KEY_PATH="${EXISTING_GIT_SSH_KEY_PATH:-/root/.ssh/id_rsa}"
-        read -p "Enter the path to your SSH private key [$DEFAULT_SSH_KEY_PATH]: " SSH_KEY_INPUT
-        SSH_KEY_PATH=${SSH_KEY_INPUT:-$DEFAULT_SSH_KEY_PATH}
+        read -p "$(echo -e ${CYAN}${BULLET}${NC}) Git repository path [/opt/docker]: " REPO_PATH
+        REPO_PATH=${REPO_PATH:-/opt/docker}
+    fi
+
+    # Projects root path
+    if [ "$HAS_GUM" = true ]; then
+        PROJECTS_PATH=$(gum input \
+            --placeholder "${REPO_PATH}" \
+            --prompt "${BULLET} Projects root path: " \
+            --value "${REPO_PATH}" \
+            --width 60)
+    else
+        read -p "$(echo -e ${CYAN}${BULLET}${NC}) Projects root path [${REPO_PATH}]: " PROJECTS_PATH
+        PROJECTS_PATH=${PROJECTS_PATH:-${REPO_PATH}}
+    fi
+
+    # Arcane base URL
+    if [ "$HAS_GUM" = true ]; then
+        ARCANE_URL=$(gum input \
+            --placeholder "http://localhost:3552" \
+            --prompt "${BULLET} Arcane base URL: " \
+            --value "http://localhost:3552" \
+            --width 60)
+    else
+        read -p "$(echo -e ${CYAN}${BULLET}${NC}) Arcane base URL [http://localhost:3552]: " ARCANE_URL
+        ARCANE_URL=${ARCANE_URL:-http://localhost:3552}
+    fi
+
+    # Arcane API key (password mode with gum)
+    if [ "$HAS_GUM" = true ]; then
+        API_KEY=$(gum input \
+            --password \
+            --placeholder "Enter your Arcane API key" \
+            --prompt "${BULLET} Arcane API key: " \
+            --width 60)
+        while [ -z "$API_KEY" ]; do
+            print_warning "API key cannot be empty"
+            API_KEY=$(gum input \
+                --password \
+                --placeholder "Enter your Arcane API key" \
+                --prompt "${BULLET} Arcane API key: " \
+                --width 60)
+        done
+    else
+        read -sp "$(echo -e ${CYAN}${BULLET}${NC}) Arcane API key: " API_KEY
+        echo ""  # New line after password input
+        while [ -z "$API_KEY" ]; do
+            print_warning "API key cannot be empty"
+            read -sp "$(echo -e ${CYAN}${BULLET}${NC}) Arcane API key: " API_KEY
+            echo ""
+        done
+    fi
+
+    # Environment ID
+    if [ "$HAS_GUM" = true ]; then
+        ENV_ID=$(gum input \
+            --placeholder "0" \
+            --prompt "${BULLET} Arcane environment ID: " \
+            --value "0" \
+            --width 60)
+    else
+        read -p "$(echo -e ${CYAN}${BULLET}${NC}) Arcane environment ID [0]: " ENV_ID
+        ENV_ID=${ENV_ID:-0}
+    fi
+
+    # SSH key path (optional)
+    if [ "$HAS_GUM" = true ]; then
+        if gum confirm "${BULLET} Configure SSH key for private repositories?"; then
+            SSH_KEY=$(gum file --height 15 --file 2>/dev/null || true)
+            if [ -z "$SSH_KEY" ]; then
+                SSH_KEY=$(gum input \
+                    --placeholder "/root/.ssh/id_rsa" \
+                    --prompt "${BULLET} SSH key path: " \
+                    --width 60)
+            fi
+        else
+            SSH_KEY=""
+        fi
+    else
+        read -p "$(echo -e ${CYAN}${BULLET}${NC}) SSH key path (optional, press Enter to skip): " SSH_KEY
+    fi
+
+    # Validate SSH key if provided
+    if [ -n "$SSH_KEY" ] && [ ! -f "$SSH_KEY" ]; then
+        print_warning "SSH key not found at: ${SSH_KEY}"
+        print_info "You can update this later in ${CONFIG_FILE}"
     fi
     
-    # Create config file
-    cat > ${CONFIG_PATH}/config.env <<EOF
-# Docker Compose Git Sync Configuration
-# Generated by install.sh on $(date)
+    # Write configuration
+    cat > "${CONFIG_FILE}" <<EOF
+# Arcane GitOps Configuration
+# Generated: $(date)
 
-# Git repository path (projects are discovered within this directory)
+# Git repository path
 COMPOSE_REPO_PATH=${REPO_PATH}
 
-# Git Authentication Method (ssh or https)
-GIT_AUTH_METHOD=${AUTH_METHOD}
+# Projects root path
+PROJECTS_ROOT_PATH=${PROJECTS_PATH}
 
-# Arcane API Configuration
+# Arcane API configuration
 ARCANE_BASE_URL=${ARCANE_URL}
-ARCANE_API_KEY=${ARCANE_KEY}
+ARCANE_API_KEY=${API_KEY}
 ARCANE_ENV_ID=${ENV_ID}
 
-# Log file location
-LOG_FILE=/var/log/arcane-gitops.log
 EOF
-
-    # Add SSH key path if configured
-    if [[ "$AUTH_METHOD" == "ssh" && -n "$SSH_KEY_PATH" ]]; then
-        echo "" >> ${CONFIG_PATH}/config.env
-        echo "# Git SSH private key for repository access" >> ${CONFIG_PATH}/config.env
-        echo "GIT_SSH_KEY_PATH=${SSH_KEY_PATH}" >> ${CONFIG_PATH}/config.env
-    fi
-
-    # Add HTTPS token if configured
-    if [[ "$AUTH_METHOD" == "https" && -n "$HTTPS_TOKEN" ]]; then
-        echo "" >> ${CONFIG_PATH}/config.env
-        echo "# GitHub personal access token for HTTPS authentication" >> ${CONFIG_PATH}/config.env
-        echo "GIT_HTTPS_TOKEN=${HTTPS_TOKEN}" >> ${CONFIG_PATH}/config.env
+    
+    if [ -n "$SSH_KEY" ]; then
+        echo "# SSH key for private repos" >> "${CONFIG_FILE}"
+        echo "GIT_SSH_KEY_PATH=${SSH_KEY}" >> "${CONFIG_FILE}"
     fi
     
-    echo "" >> ${CONFIG_PATH}/config.env
-    echo "# NOTE: Projects are auto-detected based on folder names" >> ${CONFIG_PATH}/config.env
-    echo "# Folder name must match Arcane project name (e.g., zerobyte folder → 'zerobyte' project)" >> ${CONFIG_PATH}/config.env
+    chmod 600 "${CONFIG_FILE}"
+    print_success "Configuration saved to ${CONFIG_FILE}"
     
-    chmod 600 ${CONFIG_PATH}/config.env
-    print_success "Configuration created at ${CONFIG_PATH}/config.env"
-    
-    # Verify the configuration
-    echo
-    print_info "Verifying configuration..."
-    if [[ -f "${CONFIG_PATH}/config.env" ]]; then
-        if grep -q "ARCANE_BASE_URL=" "${CONFIG_PATH}/config.env" && grep -q "ARCANE_API_KEY=" "${CONFIG_PATH}/config.env"; then
-            print_success "Config file created successfully"
-            echo
-            print_info "Configuration summary:"
-            echo "  Repository: ${REPO_PATH}"
-            echo "  Git auth method: ${AUTH_METHOD}"
-            if [[ "$AUTH_METHOD" == "ssh" ]]; then
-                echo "  SSH key: ${SSH_KEY_PATH}"
-            else
-                echo "  HTTPS token: ***MASKED***"
-            fi
-            echo "  Arcane URL: ${ARCANE_URL}"
-            echo "  Arcane environment: ${ENV_ID}"
-        else
-            print_error "Config file is missing required values!"
-            cat "${CONFIG_PATH}/config.env"
-            exit 1
-        fi
-    else
-        print_error "Failed to create config file!"
-        exit 1
-    fi
-}
-
-install_systemd_files() {
-    print_info "Installing systemd service and timer..."
-    
-    install -m 644 arcane-gitops.service ${SERVICE_PATH}/arcane-gitops.service
-    install -m 644 arcane-gitops.timer ${SERVICE_PATH}/arcane-gitops.timer
-    
-    systemctl daemon-reload
-    print_success "Systemd files installed"
-}
-
-enable_service() {
-    print_info "Enabling and starting timer..."
-    
-    systemctl enable arcane-gitops.timer
-    systemctl start arcane-gitops.timer
-    
-    print_success "Timer enabled and started"
-    echo
-    print_info "Timer status:"
-    systemctl status arcane-gitops.timer --no-pager
-}
-
-test_run() {
-    echo
-    print_info "Would you like to test the sync now?"
-    read -p "Run a test sync? (y/n) [n]: " -n 1 -r
-    echo
-    REPLY=${REPLY:-n}
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo
-        print_info "Verifying config file one more time..."
-        if [[ -f "${CONFIG_PATH}/config.env" ]]; then
-            print_info "Config file exists at ${CONFIG_PATH}/config.env"
-            print_info "Config contents (API key masked):"
-            cat "${CONFIG_PATH}/config.env" | sed 's/ARCANE_API_KEY=.*/ARCANE_API_KEY=***MASKED***/'
-            echo
-        else
-            print_error "Config file not found at ${CONFIG_PATH}/config.env!"
-            return 1
-        fi
+    # Install systemd files if they exist
+    if [ -f "arcane-gitops.service" ] && [ -f "arcane-gitops.timer" ]; then
+        print_step "Installing systemd service files..."
+        cp arcane-gitops.service arcane-gitops.timer /etc/systemd/system/
+        systemctl daemon-reload
+        print_success "Systemd files installed"
         
-        print_info "Running test sync..."
-        if systemctl start arcane-gitops.service; then
-            sleep 3
-            print_info "Service logs:"
-            journalctl -u arcane-gitops.service -n 50 --no-pager
-        else
-            print_error "Failed to start service"
-            journalctl -u arcane-gitops.service -n 50 --no-pager
-        fi
-    fi
-}
-
-print_next_steps() {
-    echo
-    echo "=========================================="
-    print_success "Installation complete!"
-    echo "=========================================="
-    echo
-    echo "Next steps:"
-    echo
-    echo "1. Check timer status:"
-    echo "   systemctl status arcane-gitops.timer"
-    echo
-    echo "2. View logs:"
-    echo "   journalctl -u arcane-gitops.service -f"
-    echo
-    echo "3. Manual run:"
-    echo "   systemctl start arcane-gitops.service"
-    echo
-    echo "4. Edit configuration:"
-    echo "   nano ${CONFIG_PATH}/config.env"
-    echo
-    echo "5. Adjust sync frequency:"
-    echo "   nano ${SERVICE_PATH}/arcane-gitops.timer"
-    echo "   systemctl daemon-reload"
-    echo "   systemctl restart arcane-gitops.timer"
-    echo
-}
-
-uninstall() {
-    echo "=========================================="
-    echo "  Docker Compose Git Sync Uninstaller"
-    echo "=========================================="
-    echo
-
-    check_root
-
-    print_warning "This will remove arcane-gitops from your system"
-    echo
-    read -p "Are you sure you want to uninstall? (y/n) [n]: " -n 1 -r
-    echo
-    REPLY=${REPLY:-n}
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Uninstall cancelled"
-        exit 0
-    fi
-
-    # Stop and disable the timer
-    print_info "Stopping timer and service..."
-    systemctl stop arcane-gitops.timer 2>/dev/null || true
-    systemctl stop arcane-gitops.service 2>/dev/null || true
-    systemctl disable arcane-gitops.timer 2>/dev/null || true
-    systemctl disable arcane-gitops.service 2>/dev/null || true
-    print_success "Service stopped and disabled"
-
-    # Remove systemd files
-    print_info "Removing systemd files..."
-    rm -f ${SERVICE_PATH}/arcane-gitops.service
-    rm -f ${SERVICE_PATH}/arcane-gitops.timer
-    systemctl daemon-reload
-    print_success "Systemd files removed"
-
-    # Remove binary
-    print_info "Removing binary..."
-    rm -f ${INSTALL_PATH}/${BINARY_NAME}
-    print_success "Binary removed"
-
-    # Ask about config directory
-    print_warning "Configuration directory: ${CONFIG_PATH}"
-    read -p "Remove configuration directory and config files? (y/n) [n]: " -n 1 -r
-    echo
-    REPLY=${REPLY:-n}
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        print_info "Removing configuration directory..."
-        rm -rf ${CONFIG_PATH}
-        print_success "Configuration directory removed"
+        # Enable and start timer
+        print_step "Enabling systemd timer..."
+        systemctl enable arcane-gitops.timer
+        systemctl start arcane-gitops.timer
+        print_success "Timer enabled and started"
     else
-        print_info "Keeping configuration directory at ${CONFIG_PATH}"
+        print_warning "Systemd service files not found in current directory"
+        print_info "You may need to configure systemd manually"
     fi
-
-    echo
-    echo "=========================================="
-    print_success "Uninstall complete!"
-    echo "=========================================="
-    echo
-    print_info "arcane-gitops has been removed from your system"
-    if [[ -d ${CONFIG_PATH} ]]; then
-        print_info "Configuration remains at ${CONFIG_PATH}"
-    fi
-    echo
 }
+
+test_installation() {
+    print_section "Testing Installation"
+    
+    print_step "Running test sync..."
+    echo ""
+    
+    if systemctl start arcane-gitops.service; then
+        sleep 2
+        print_success "Test sync completed successfully"
+        
+        echo -e "\n${CYAN}${BULLET}${NC} View logs with:"
+        echo -e "  ${DIM}sudo journalctl -u arcane-gitops.service -f${NC}"
+    else
+        print_warning "Test sync failed - check configuration"
+        echo -e "\n${CYAN}${BULLET}${NC} Debug with:"
+        echo -e "  ${DIM}sudo journalctl -u arcane-gitops.service -n 50${NC}"
+    fi
+}
+
+print_summary() {
+    local box_width=62
+    local title=" ${CHECK} Installation Complete! "
+    local padding=$(( (box_width - ${#title}) / 2 ))
+
+    echo -e "\n${BOLD}${GREEN}${BOX_TL}$(printf '%*s' $box_width '' | tr ' ' "${BOX_H}")${BOX_TR}${NC}"
+    echo -e "${BOLD}${GREEN}${BOX_V}${NC}$(printf '%*s' $padding '')${title}$(printf '%*s' $padding '')${BOLD}${GREEN}${BOX_V}${NC}"
+    echo -e "${BOLD}${GREEN}${BOX_BL}$(printf '%*s' $box_width '' | tr ' ' "${BOX_H}")${BOX_BR}${NC}\n"
+    
+    echo -e "${BOLD}${CYAN}Quick Start:${NC}"
+    echo -e "${BULLET} ${DIM}Manual sync:${NC}      sudo systemctl start arcane-gitops.service"
+    echo -e "${BULLET} ${DIM}View logs:${NC}        sudo journalctl -u arcane-gitops.service -f"
+    echo -e "${BULLET} ${DIM}Check timer:${NC}      sudo systemctl status arcane-gitops.timer"
+    echo -e "${BULLET} ${DIM}Configuration:${NC}    ${CONFIG_FILE}"
+    
+    echo -e "\n${BOLD}${CYAN}Next Steps:${NC}"
+    echo -e "${BULLET} Ensure your Git repository is accessible"
+    echo -e "${BULLET} Verify API key has proper permissions"
+    echo -e "${BULLET} Check that compose.yaml files are in place"
+    
+    echo -e "\n${DIM}For more information, visit:${NC}"
+    echo -e "${CYAN}https://github.com/${GITHUB_REPO}${NC}\n"
+}
+
+cleanup() {
+    if [ -n "$TMP_DIR" ] && [ -d "$TMP_DIR" ]; then
+        rm -rf "$TMP_DIR"
+    fi
+}
+
+#############################################################################
+# Main Installation Flow
+#############################################################################
 
 main() {
-    # Handle command-line arguments
-    if [[ "${1:-}" == "--uninstall" ]]; then
-        uninstall
-        return
-    fi
-
-    echo "=========================================="
-    echo "  Docker Compose Git Sync Installer"
-    echo "  (Arcane API Edition)"
-    echo "=========================================="
-    echo
-
+    trap cleanup EXIT
+    
+    print_header
     check_root
-    check_go
-    check_git
-
-    echo
-    print_info "Starting installation..."
-
-    build_binary
+    detect_system
+    get_latest_release
+    download_binary
     install_binary
-    create_config
-    install_systemd_files
-    enable_service
-
-    test_run
-    print_next_steps
+    configure_service
+    test_installation
+    print_summary
 }
 
-# Run main function with arguments
+# Run main installation
 main "$@"

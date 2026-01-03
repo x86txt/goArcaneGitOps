@@ -33,19 +33,50 @@ A GitOps-style sync tool that automatically synchronizes Docker Compose projects
 ## Installation
 
 > [!TIP]
-> **Quick start**: `git clone https://github.com/x86txt/goArcaneGitOps.git && cd goArcaneGitOps && sudo ./install.sh`
+> **One-line install**: `curl -fsSL https://raw.githubusercontent.com/x86txt/goArcaneGitOps/main/install.sh | sudo bash`
 
-### Quick Install (Interactive)
+### Quick Install (Recommended)
 
+**Remote install without cloning:**
 ```bash
+# Using curl
+curl -fsSL https://raw.githubusercontent.com/x86txt/goArcaneGitOps/main/install.sh | sudo bash
+
+# Or using wget
+wget -qO- https://raw.githubusercontent.com/x86txt/goArcaneGitOps/main/install.sh | sudo bash
+```
+
+**Or clone and run locally:**
+```bash
+git clone https://github.com/x86txt/goArcaneGitOps.git
+cd goArcaneGitOps
 sudo ./install.sh
 ```
 
+**Installation options:**
+```bash
+# Standard installation (with colors and Unicode)
+sudo ./install.sh
+
+# ASCII-only mode (for older terminals)
+sudo ./install.sh --no-unicode
+
+# No colors (for screen readers)
+sudo ./install.sh --no-color
+
+# Maximum compatibility
+sudo ./install.sh --no-unicode --no-color
+```
+
 The installer will:
-1. Build the binary
-2. Prompt for configuration (repo path, Arcane URL, API key)
-3. Install systemd service and timer
-4. Run an initial test sync
+1. Detect your system architecture
+2. Download the latest pre-built binary from GitHub releases
+3. Prompt for configuration (repo path, Arcane URL, API key)
+4. Install systemd service and timer
+5. Run an initial test sync
+
+> [!NOTE]
+> The installer supports optional [gum](https://github.com/charmbracelet/gum) integration for enhanced interactive prompts. If Go is available, the installer can install it for you.
 
 ### Manual Installation
 
