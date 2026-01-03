@@ -57,6 +57,11 @@ Enhanced the install.sh script with improved UX, accessibility, and security fea
 - `v0.0.9` - Initial enhanced installer (had broken download URLs)
 - `v0.0.10` - Fixed installer with working downloads and SHA256 verification
 
+### Post-v0.0.10 Fixes (main branch)
+- `c9fff5c` - fix: suppress curl progress output and use release tag for version
+  - Added `-s` flag to curl to suppress progress bars
+  - Display release tag (e.g., v0.0.10) instead of "unknown" for version
+
 ### Files Modified
 - `install.sh` - Complete rewrite of download/verification logic
 - `README.md` - Added one-line install command and new flags
