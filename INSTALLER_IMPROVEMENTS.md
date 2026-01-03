@@ -111,6 +111,31 @@ while [ -z "$API_KEY" ]; do
 done
 ```
 
+### 5. SHA256 Checksum Verification
+
+#### Automatic Download Verification
+The installer now automatically verifies downloaded binaries using SHA256 checksums:
+
+```bash
+# Download archive and checksum
+download_archive "arcane-gitops-0.0.9-linux-amd64.tar.gz"
+download_checksum "arcane-gitops-0.0.9-linux-amd64.tar.gz.sha256"
+
+# Verify checksum (Linux)
+sha256sum -c arcane-gitops-0.0.9-linux-amd64.tar.gz.sha256
+
+# Verify checksum (macOS)
+shasum -a 256 -c arcane-gitops-0.0.9-linux-amd64.tar.gz.sha256
+```
+
+**Security Features:**
+- ✓ Downloads official SHA256 checksum from GitHub releases
+- ✓ Verifies archive integrity before extraction
+- ✓ Detects corrupted or tampered downloads
+- ✓ Supports both Linux (sha256sum) and macOS (shasum)
+- ✓ Fails installation if checksum doesn't match
+- ✓ Graceful warning if verification tools not available
+
 ## 📋 Feature Comparison
 
 ### Before vs After
@@ -124,6 +149,8 @@ done
 | Accessibility | Unicode only | Unicode or ASCII |
 | Color support | Always on | Optional |
 | Validation | Minimal | SSH key + API key validation |
+| SHA256 verification | None | Automatic checksum verification |
+| Archive handling | Direct binary | Proper archive extraction |
 | Performance | Good | Optimized (non-blocking) |
 | User experience | Good | Excellent (with gum) or Good (without) |
 

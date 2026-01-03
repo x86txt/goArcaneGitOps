@@ -282,61 +282,122 @@ get_latest_release() {
 
 download_binary() {
     print_section "Downloading Binary"
-    
-    # Construct download URL
-    BINARY_FILENAME="${BINARY_NAME}_${PLATFORM}"
-    DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/${BINARY_FILENAME}"
-    
-    print_info "Download URL: ${DIM}${DOWNLOAD_URL}${NC}"
-    
+
+    # Strip 'v' from version for archive name (e.g., v0.0.9 -> 0.0.9)
+    VERSION_NUMBER="${LATEST_VERSION#v}"
+
+    # Determine archive extension based on OS
+    if [ "$OS" = "windows" ]; then
+        ARCHIVE_EXT="zip"
+    else
+        ARCHIVE_EXT="tar.gz"
+    fi
+
+    # Construct archive filename: arcane-gitops-VERSION-OS-ARCH.EXTENSION
+    ARCHIVE_NAME="${BINARY_NAME}-${VERSION_NUMBER}-${OS}-${ARCH}.${ARCHIVE_EXT}"
+    CHECKSUM_NAME="${ARCHIVE_NAME}.sha256"
+
+    # Construct download URLs
+    ARCHIVE_URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/${ARCHIVE_NAME}"
+    CHECKSUM_URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_VERSION}/${CHECKSUM_NAME}"
+
+    print_info "Archive: ${DIM}${ARCHIVE_NAME}${NC}"
+    print_info "Checksum: ${DIM}${CHECKSUM_NAME}${NC}"
+
     # Create temporary directory
     TMP_DIR=$(mktemp -d)
+    TMP_ARCHIVE="${TMP_DIR}/${ARCHIVE_NAME}"
+    TMP_CHECKSUM="${TMP_DIR}/${CHECKSUM_NAME}"
     TMP_BINARY="${TMP_DIR}/${BINARY_NAME}"
-    
-    print_step "Downloading to temporary location..."
-    
-    # Download with progress indicator
+
+    # Download archive
+    print_step "Downloading archive..."
     if command -v curl >/dev/null 2>&1; then
-        if curl -L --fail --progress-bar "${DOWNLOAD_URL}" -o "${TMP_BINARY}" 2>&1 | \
-           while IFS= read -r line; do
-               if [[ $line =~ ([0-9]+\.[0-9]+)% ]]; then
-                   percentage=${BASH_REMATCH[1]}
-                   # Simple progress indicator
-                   printf "\r  ${CYAN}Downloading...${NC} ${BOLD}%.1f%%${NC}" "$percentage"
-               fi
-           done; then
-            printf "\r%80s\r" ""  # Clear line
-            print_success "Binary downloaded successfully"
-        else
-            print_error "Failed to download binary from ${DOWNLOAD_URL}"
+        if ! curl -L --fail -o "${TMP_ARCHIVE}" "${ARCHIVE_URL}" 2>&1; then
+            print_error "Failed to download archive from ${ARCHIVE_URL}"
             print_warning "Please check if the release exists for your platform"
             rm -rf "${TMP_DIR}"
             exit 1
         fi
     elif command -v wget >/dev/null 2>&1; then
-        if wget --show-progress --progress=bar:force "${DOWNLOAD_URL}" -O "${TMP_BINARY}" 2>&1 | \
-           while IFS= read -r line; do
-               printf "\r  ${CYAN}${line}${NC}"
-           done; then
-            printf "\r%80s\r" ""  # Clear line
-            print_success "Binary downloaded successfully"
-        else
-            print_error "Failed to download binary from ${DOWNLOAD_URL}"
+        if ! wget -q -O "${TMP_ARCHIVE}" "${ARCHIVE_URL}" 2>&1; then
+            print_error "Failed to download archive from ${ARCHIVE_URL}"
             rm -rf "${TMP_DIR}"
             exit 1
         fi
     fi
-    
-    # Verify download
-    if [ ! -f "${TMP_BINARY}" ] || [ ! -s "${TMP_BINARY}" ]; then
-        print_error "Downloaded file is empty or doesn't exist"
+    print_success "Archive downloaded"
+
+    # Download checksum
+    print_step "Downloading checksum..."
+    if command -v curl >/dev/null 2>&1; then
+        if ! curl -L --fail -o "${TMP_CHECKSUM}" "${CHECKSUM_URL}" 2>&1; then
+            print_error "Failed to download checksum from ${CHECKSUM_URL}"
+            rm -rf "${TMP_DIR}"
+            exit 1
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if ! wget -q -O "${TMP_CHECKSUM}" "${CHECKSUM_URL}" 2>&1; then
+            print_error "Failed to download checksum from ${CHECKSUM_URL}"
+            rm -rf "${TMP_DIR}"
+            exit 1
+        fi
+    fi
+    print_success "Checksum downloaded"
+
+    # Verify checksum
+    print_step "Verifying checksum..."
+    cd "${TMP_DIR}"
+    if command -v sha256sum >/dev/null 2>&1; then
+        if ! sha256sum -c "${CHECKSUM_NAME}" 2>&1 | grep -q "OK"; then
+            print_error "Checksum verification failed"
+            print_warning "The downloaded file may be corrupted or tampered with"
+            rm -rf "${TMP_DIR}"
+            exit 1
+        fi
+    elif command -v shasum >/dev/null 2>&1; then
+        # macOS
+        if ! shasum -a 256 -c "${CHECKSUM_NAME}" 2>&1 | grep -q "OK"; then
+            print_error "Checksum verification failed"
+            print_warning "The downloaded file may be corrupted or tampered with"
+            rm -rf "${TMP_DIR}"
+            exit 1
+        fi
+    else
+        print_warning "sha256sum/shasum not found, skipping checksum verification"
+    fi
+    cd - >/dev/null
+    print_success "Checksum verified"
+
+    # Extract archive
+    print_step "Extracting archive..."
+    cd "${TMP_DIR}"
+    if [ "$ARCHIVE_EXT" = "tar.gz" ]; then
+        if ! tar -xzf "${ARCHIVE_NAME}" 2>&1; then
+            print_error "Failed to extract archive"
+            rm -rf "${TMP_DIR}"
+            exit 1
+        fi
+    elif [ "$ARCHIVE_EXT" = "zip" ]; then
+        if ! unzip -q "${ARCHIVE_NAME}" 2>&1; then
+            print_error "Failed to extract archive"
+            rm -rf "${TMP_DIR}"
+            exit 1
+        fi
+    fi
+    cd - >/dev/null
+    print_success "Archive extracted"
+
+    # Verify binary exists
+    if [ ! -f "${TMP_BINARY}" ]; then
+        print_error "Binary not found in archive"
         rm -rf "${TMP_DIR}"
         exit 1
     fi
-    
+
     # Make executable
     chmod +x "${TMP_BINARY}"
-    print_success "Binary made executable"
+    print_success "Binary ready for installation"
 }
 
 #############################################################################
