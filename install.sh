@@ -313,14 +313,14 @@ download_binary() {
     # Download archive
     print_step "Downloading archive..."
     if command -v curl >/dev/null 2>&1; then
-        if ! curl -L --fail -o "${TMP_ARCHIVE}" "${ARCHIVE_URL}" 2>&1; then
+        if ! curl -fsSL -o "${TMP_ARCHIVE}" "${ARCHIVE_URL}"; then
             print_error "Failed to download archive from ${ARCHIVE_URL}"
             print_warning "Please check if the release exists for your platform"
             rm -rf "${TMP_DIR}"
             exit 1
         fi
     elif command -v wget >/dev/null 2>&1; then
-        if ! wget -q -O "${TMP_ARCHIVE}" "${ARCHIVE_URL}" 2>&1; then
+        if ! wget -q -O "${TMP_ARCHIVE}" "${ARCHIVE_URL}"; then
             print_error "Failed to download archive from ${ARCHIVE_URL}"
             rm -rf "${TMP_DIR}"
             exit 1
@@ -331,13 +331,13 @@ download_binary() {
     # Download checksum
     print_step "Downloading checksum..."
     if command -v curl >/dev/null 2>&1; then
-        if ! curl -L --fail -o "${TMP_CHECKSUM}" "${CHECKSUM_URL}" 2>&1; then
+        if ! curl -fsSL -o "${TMP_CHECKSUM}" "${CHECKSUM_URL}"; then
             print_error "Failed to download checksum from ${CHECKSUM_URL}"
             rm -rf "${TMP_DIR}"
             exit 1
         fi
     elif command -v wget >/dev/null 2>&1; then
-        if ! wget -q -O "${TMP_CHECKSUM}" "${CHECKSUM_URL}" 2>&1; then
+        if ! wget -q -O "${TMP_CHECKSUM}" "${CHECKSUM_URL}"; then
             print_error "Failed to download checksum from ${CHECKSUM_URL}"
             rm -rf "${TMP_DIR}"
             exit 1
@@ -430,8 +430,7 @@ install_binary() {
     
     # Verify installation
     if [ -x "${INSTALL_DIR}/${BINARY_NAME}" ]; then
-        VERSION=$(${INSTALL_DIR}/${BINARY_NAME} --version 2>/dev/null || echo "unknown")
-        print_success "Installation verified (version: ${VERSION})"
+        print_success "Installation verified (version: ${LATEST_VERSION})"
     fi
 }
 
