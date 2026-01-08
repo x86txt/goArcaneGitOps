@@ -167,18 +167,22 @@ sudo systemctl restart arcane-gitops.timer
 
 ## Project Structure
 
-Your git repository should be organized like:
+Your source git repository should be organized like:
 
 ```
-/opt/docker/
-├── zerobyte/
+.
+├── arcane
 │   └── compose.yaml
-├── bittorrent/
+├── bittorrent
 │   └── compose.yaml
-├── nginx-test/
+├── cinephage
 │   └── compose.yaml
-└── syncTool/           # (excluded from scanning)
-    └── ...
+├── tautulli
+│   └── compose.yaml
+├── usenet
+│   └── compose.yaml
+└── zerobyte
+    └── compose.yaml
 ```
 
 Each folder name becomes the Arcane project name.
