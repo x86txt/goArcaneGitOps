@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> Please note, this repo has been retired because GitOps has been rolled into the official Arcane client.
+
 # Sync Tool - Docker Compose GitOps for Arcane
 
 [![CI Lint & Test](https://github.com/x86txt/goArcaneGitOps/actions/workflows/ci.yml/badge.svg)](https://github.com/x86txt/goArcaneGitOps/actions/workflows/ci.yml)
